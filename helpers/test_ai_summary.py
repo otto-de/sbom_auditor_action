@@ -8,20 +8,23 @@ class TestAISummary(unittest.TestCase):
         summary = generate_summary(None, [], [])
         self.assertEqual(summary, "")
 
-    @patch('openai.ChatCompletion.create')
-    def test_generate_summary_success(self, mock_create):
+    @patch('helpers.ai_summary.OpenAI')
+    def test_generate_summary_success(self, mock_openai):
+        mock_client = MagicMock()
         mock_choice = MagicMock()
         mock_choice.message.content = "Test summary"
         mock_response = MagicMock()
         mock_response.choices = [mock_choice]
-        mock_create.return_value = mock_response
+        mock_client.chat.completions.create.return_value = mock_response
+        mock_openai.return_value = mock_client
 
         denied_list = [{'package': 'test-denied', 'license': 'GPL-2.0', 'policy': 'deny'}]
         needs_review_list = [{'package': 'test-review', 'license': 'LGPL-2.1', 'policy': 'needs-review'}]
         
         summary = generate_summary('fake_api_key', denied_list, needs_review_list)
         self.assertEqual(summary, '\n### AI-Assisted Summary\n\nTest summary\n')
-        mock_create.assert_called_once()
+        mock_openai.assert_called_once_with(api_key='fake_api_key')
+        mock_client.chat.completions.create.assert_called_once()
 
 if __name__ == '__main__':
     unittest.main()

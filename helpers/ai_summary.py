@@ -1,4 +1,4 @@
-import openai
+from openai import OpenAI
 import logging
 
 def generate_summary(api_key, denied_list, needs_review_list):
@@ -8,7 +8,7 @@ def generate_summary(api_key, denied_list, needs_review_list):
     if not api_key:
         return ""
 
-    openai.api_key = api_key
+    client = OpenAI(api_key=api_key)
 
     # Construct the prompt
     prompt = """
@@ -49,7 +49,7 @@ Here is the raw data from the audit:
 
     logging.info("Generating AI summary...")
     try:
-        response = openai.ChatCompletion.create(
+        response = client.chat.completions.create(
             model="gpt-3.5-turbo",
             messages=[
                 {"role": "system", "content": "You are a license compliance expert."},
