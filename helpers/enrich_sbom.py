@@ -1,0 +1,141 @@
+import json
+import requests
+import argparse
+from tqdm import tqdm
+import urllib.parse
+from urllib.parse import quote
+
+def enrich_sbom_with_depsdev(input_sbom_path, output_sbom_path):
+    with open(input_sbom_path, 'r') as f:
+        sbom = json.load(f)
+
+    enriched = 0
+    skipped = 0
+    skipped_packages = {
+        "internal": [],
+        "github_actions": [],
+        "not_found": [],
+        "no_purl": [],
+        "exception": []
+    }
+
+    # Handle SBOMs that have the package list nested under an "sbom" key
+    sbom_content = sbom.get("sbom", sbom)
+    packages_to_process = sbom_content.get("packages", []) or sbom_content.get("components", [])
+
+    for pkg in tqdm(packages_to_process, desc="Enriching SBOM"):
+        # Extract purl from externalRefs
+        purl = None
+        for ref in pkg.get("externalRefs", []):
+            if ref.get("referenceType") == "purl":
+                purl = ref.get("referenceLocator")
+                break
+
+        if not purl:
+            skipped += 1
+            if pkg.get('name', 'Unknown') not in skipped_packages["no_purl"]:
+                skipped_packages["no_purl"].append(pkg.get('name', 'Unknown'))
+            continue
+
+        # Check for internal packages
+        if (purl.startswith("pkg:maven/de.otto.hellfish") or 
+                purl.startswith("pkg:maven/de.otto") or
+                purl.startswith("pkg:github/otto-ec/hellfish_serviceorder_management")):
+            pkg["licenseConcluded"] = "internal"
+            if purl not in skipped_packages["internal"]:
+                skipped_packages["internal"].append(purl)
+            continue
+
+        # Check for GitHub Actions
+        if purl.startswith("pkg:githubactions"):
+            skipped += 1
+            if purl not in skipped_packages["github_actions"]:
+                skipped_packages["github_actions"].append(purl)
+            continue
+
+        try:
+            licenses = []
+            clean_purl = purl.split('?')[0]
+            
+            # If the PURL doesn't have a version, try to add it from versionInfo
+            if '@' not in clean_purl and pkg.get('versionInfo'):
+                clean_purl = f"{clean_purl}@{pkg['versionInfo']}"
+
+            # Initial attempt with the (possibly now) versioned purl
+            encoded_purl = quote(clean_purl, safe='')
+            api_url = f"https://api.deps.dev/v3alpha/purl/{encoded_purl}"
+            resp = requests.get(api_url)
+            
+            # A versioned PURL response has a "version" key. A package-level response has a "package" key.
+            if resp.status_code == 200:
+                data = resp.json()
+                if "version" in data:
+                    licenses = data.get("version", {}).get("licenses", [])
+            
+            # If we still have no licenses, trigger the fallback.
+            if not licenses:
+                # We need package-level info. If the first call was for a version, we need to make a new call for the package.
+                if '@' in clean_purl:
+                    purl_no_version = clean_purl.split('@')[0]
+                    encoded_purl_no_version = quote(purl_no_version, safe='')
+                    package_api_url = f"https://api.deps.dev/v3alpha/purl/{encoded_purl_no_version}"
+                    package_resp = requests.get(package_api_url)
+                else:
+                    # The first call was already for the package, so we can reuse the response.
+                    package_resp = resp
+                    purl_no_version = clean_purl
+
+                if package_resp.status_code == 200:
+                    package_data = package_resp.json()
+                    versions = package_data.get("package", {}).get("versions", [])
+                    if versions:
+                        latest_version = max(versions, key=lambda v: v.get("publishedAt", "0"))
+                        latest_version_number = latest_version.get("versionKey", {}).get("version")
+                        
+                        if latest_version_number:
+                            versioned_purl = f"{purl_no_version}@{latest_version_number}"
+                            encoded_versioned_purl = quote(versioned_purl, safe='')
+                            versioned_api_url = f"https://api.deps.dev/v3alpha/purl/{encoded_versioned_purl}"
+                            
+                            versioned_resp = requests.get(versioned_api_url)
+                            if versioned_resp.status_code == 200:
+                                versioned_data = versioned_resp.json()
+                                licenses = versioned_data.get("version", {}).get("licenses", [])
+
+            if licenses:
+                pkg["licenseConcluded"] = ",".join(licenses)
+                enriched += 1
+            else:
+                skipped += 1
+                if purl not in skipped_packages["not_found"]:
+                    skipped_packages["not_found"].append(purl)
+
+        except Exception as e:
+            skipped += 1
+            if purl not in skipped_packages["exception"]:
+                skipped_packages["exception"].append(purl)
+
+    print(f"✅ Enriched {enriched} packages. Skipped {skipped}.")
+
+    print("\n--- Skipped Packages Summary ---")
+    for reason, pkgs in skipped_packages.items():
+        if pkgs:
+            print(f"\n{reason.replace('_', ' ').title()} ({len(pkgs)}):")
+            for p in pkgs:
+                print(f"  - {p}")
+    print("\n------------------------------")
+
+    with open(output_sbom_path, 'w') as f:
+        json.dump(sbom, f, indent=2)
+    print(f"💾 Output written to {output_sbom_path}")
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(
+        description="Enrich an SPDX SBOM with license data from deps.dev"
+    )
+    parser.add_argument("input", help="Input SPDX SBOM JSON file")
+    parser.add_argument("output", help="Output enriched SPDX JSON file")
+    args = parser.parse_args()
+
+    enrich_sbom_with_depsdev(args.input, args.output)

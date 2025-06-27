@@ -1,0 +1,102 @@
+name: 'SBOM Auditor Action'
+description: 'Audits SBOM for license compliance.'
+author: 'Christian Herweg'
+
+inputs:
+  github_token:
+    description: 'GitHub token to access the dependency graph API.'
+    required: true
+    default: ${{ github.token }}
+  fail_hard:
+    description: 'If true, the action will fail if license violations are found.'
+    required: false
+    default: 'false'
+  openai_api_key:
+    description: 'OpenAI API key for enriching the SBOM.'
+    required: false
+
+outputs:
+  audit_exit_code:
+    description: 'The exit code of the license audit. 0 if successful, non-zero otherwise.'
+    value: ${{ steps.audit_licenses.outputs.AUDIT_EXIT_CODE }}
+  license-audit-report:
+    description: "Path to the license audit report in markdown format."
+    value: "license-audit-report.md"
+  sbom_enriched:
+    description: "Path to the enriched SBOM file."
+    value: "sbom_enriched.json"
+  licenses_md:
+    description: "Path to the collected license texts."
+    value: "LICENSES.md"
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.x'
+
+    - name: Install Python dependencies
+      shell: bash
+      run: |
+        python -m pip install --upgrade pip
+        pip install requests tqdm
+
+    - name: Get SBOM from GitHub API
+      shell: bash
+      run: |
+        gh api /repos/${{ github.repository }}/dependency-graph/sbom > sbom.json
+      env:
+        GH_TOKEN: ${{ inputs.github_token }}
+
+    - name: Check for download error
+      shell: bash
+      run: |
+        if grep -q '"message": "Not Found"' sbom.json; then
+          echo "Error: Failed to download SBOM. It\'s possible the Dependency Graph is not enabled for this repository."
+          cat sbom.json
+          exit 1
+        fi
+        echo "SBOM file successfully downloaded."
+        echo "--- SBOM HEAD ---"
+        head -20 sbom.json
+        echo "--- SBOM TAIL ---"
+        tail -20 sbom.json
+        echo "--- SBOM Entry Count (packages/components) ---"
+        python3 -c "import json; d=json.load(open('sbom.json')); print('packages:', len(d.get('packages', []))); print('components:', len(d.get('components', [])))"
+
+    - name: Enrich SBOM
+      shell: bash
+      run: python ${{ github.action_path }}/helpers/enrich_sbom.py sbom.json sbom_enriched.json
+      env:
+        OPENAI_API_KEY: ${{ inputs.openai_api_key }}
+
+    - name: Collect License Texts
+      shell: bash
+      run: python ${{ github.action_path }}/helpers/collect_licenses.py sbom_enriched.json LICENSES.md
+
+    - name: Audit Licenses
+      id: audit_licenses
+      shell: bash
+      run: |
+        AUDIT_EXIT_CODE=0
+        python ${{ github.action_path }}/helpers/audit_licenses.py sbom_enriched.json ${{ github.action_path }}/helpers/policy.json --markdown > license-audit-report.md || AUDIT_EXIT_CODE=$?
+        cat license-audit-report.md >> $GITHUB_STEP_SUMMARY
+        echo "AUDIT_EXIT_CODE=${AUDIT_EXIT_CODE}" >> $GITHUB_OUTPUT
+
+    - name: Upload license artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: license-artifacts
+        path: |
+          sbom_enriched.json
+          LICENSES.md
+          license-audit-report.md
+      
+    - name: Check audit result
+      if: steps.audit_licenses.outputs.AUDIT_EXIT_CODE != '0' && inputs.fail_hard == 'true'
+      shell: bash
+      run: |
+        echo "License audit failed. See the report for details."
+        exit 1

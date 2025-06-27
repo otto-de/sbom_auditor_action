@@ -1,0 +1,116 @@
+name: Update Enriched SBOM and Licenses
+description: |
+  This workflow updates the enriched SBOM and license information for a repository.
+  It retrieves the SBOM from the GitHub API, enriches it, collects license texts,
+  audits the licenses against a policy, and uploads the results as artifacts.
+on:
+  workflow_call:
+    inputs:
+      inherit-inputs:
+        required: false
+        type: string
+      fail_hard: 
+        required: false
+        type: boolean
+        default: false
+    secrets:
+      OPENAI_API_KEY:
+        required: false
+      TOKEN_APP_ID:
+        required: true
+      TOKEN_APP_PRIVATE_KEY:
+        required: true 
+
+env:
+  CHECKOUT_REF: ${{ fromJSON(inputs.inherit-inputs).ref || github.event.pull_request.head.sha }}
+
+jobs:
+  analyze-sbom:
+    runs-on: ubuntu-latest
+    outputs:
+      license_violation_found: ${{ steps.license_check.outputs.VIOLATION_FOUND }}
+
+    steps:
+      - name: Generate token
+        id: generate_token
+        uses: getsentry/action-github-app-token@v3
+        with:
+          app_id: ${{ secrets.TOKEN_APP_ID }}
+          private_key: ${{ secrets.TOKEN_APP_PRIVATE_KEY }}
+          
+      - name: Checkout Caller Repository
+        uses: actions/checkout@v4.1.1
+        with:
+          ref: ${{ env.CHECKOUT_REF }}
+          fetch-depth: 1
+
+      - name: Checkout gha-store Repository (for tools)
+        uses: actions/checkout@v4.1.1
+        with:
+          repository: otto-ec/si_gha-store # This repository
+          ref: main # Or a specific tag/branch of your tools
+          token: ${{ steps.generate_token.outputs.token }}
+          path: gha-store # Checkout into a 'gha-store' subdirectory
+          fetch-depth: 1
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.x'
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests tqdm
+
+
+
+      - name: Get SBOM from GitHub API
+        run: |
+          gh api /repos/${{ github.event.repository.owner.login }}/${{ github.event.repository.name }}/dependency-graph/sbom > sbom.json
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Check for download error
+        run: |
+          if grep -q '"message": "Not Found"' sbom.json; then
+            echo "Error: Failed to download SBOM. It's possible the Dependency Graph is not enabled for this repository."
+            cat sbom.json
+            exit 1
+          fi
+          echo "SBOM file successfully downloaded."
+          echo "--- SBOM HEAD ---"
+          head -20 sbom.json
+          echo "--- SBOM TAIL ---"
+          tail -20 sbom.json
+          echo "--- SBOM Entry Count (packages/components) ---"
+          python3 -c "import json; d=json.load(open('sbom.json')); print('packages:', len(d.get('packages', []))); print('components:', len(d.get('components', [])))"
+
+
+      - name: Enrich SBOM
+        run: python gha-store/helpers/enrich_sbom.py sbom.json sbom_enriched.json
+
+      - name: Collect License Texts
+        run: python gha-store/helpers/collect_licenses.py sbom_enriched.json LICENSES.md
+
+      - name: Audit Licenses
+        id: audit_licenses
+        run: |
+          AUDIT_EXIT_CODE=0
+          python gha-store/helpers/audit_licenses.py sbom_enriched.json gha-store/helpers/policy.json --markdown > license-audit-report.md || AUDIT_EXIT_CODE=$?
+          cat license-audit-report.md >> $GITHUB_STEP_SUMMARY
+          echo "AUDIT_EXIT_CODE=${AUDIT_EXIT_CODE}" >> $GITHUB_OUTPUT
+
+      - name: Upload license artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: license-artifacts
+          path: |
+            sbom_enriched.json
+            LICENSES.md
+            license-audit-report.md
+      
+      - name: Check audit result
+        if: steps.audit_licenses.outputs.AUDIT_EXIT_CODE != '0'
+        run: |
+          echo "License audit failed. See the report for details."
+          exit 1
