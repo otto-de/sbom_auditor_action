@@ -4,6 +4,7 @@ import argparse
 import logging
 import re
 import fnmatch
+from ai_summary import generate_summary
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -166,10 +167,14 @@ def audit_component(component, license_policies, package_policies):
     
     return [result]
 
-def generate_report(denied, needs_review, allowed, debug, markdown):
+def generate_report(denied, needs_review, allowed, debug, markdown, openai_api_key=None):
     """Generates and prints the license audit report."""
+    report = ""
+    if openai_api_key:
+        report += generate_summary(openai_api_key, denied, needs_review)
+
     if markdown:
-        report = "## License Audit Report\n\n"
+        report += "## License Audit Report\n\n"
         if denied:
             report += "### DENIED PACKAGES\n\n"
             report += "| Package | License | Policy | PURL |\n"
@@ -199,6 +204,7 @@ def generate_report(denied, needs_review, allowed, debug, markdown):
         
         print(report)
     else:
+        print(report) # Print AI summary if available
         print("--- License Audit Report ---")
         
         if denied:
@@ -221,7 +227,7 @@ def generate_report(denied, needs_review, allowed, debug, markdown):
 
         print("\n--- End of Report ---")
 
-def audit_licenses(sbom_path, policy_path, package_policy_path=None, debug=False, markdown=False):
+def audit_licenses(sbom_path, policy_path, package_policy_path=None, debug=False, markdown=False, openai_api_key=None):
     """
     Audits licenses in an SBOM file against a policy file.
     """
@@ -270,7 +276,7 @@ def audit_licenses(sbom_path, policy_path, package_policy_path=None, debug=False
     logging.debug("Finished processing all components.")
     logging.debug(f"Denied: {len(denied)}, Needs Review: {len(needs_review)}, Allowed: {len(allowed)}")
 
-    generate_report(denied, needs_review, allowed, debug, markdown)
+    generate_report(denied, needs_review, allowed, debug, markdown, openai_api_key)
 
     if denied or needs_review:
         logging.info("Found packages that are denied or need review. Exiting with status 1.")
@@ -283,9 +289,10 @@ if __name__ == '__main__':
     parser.add_argument('sbom_path', help='Path to the enriched SBOM JSON file.')
     parser.add_argument('policy_path', help='Path to the policy JSON file.')
     parser.add_argument('--package-policy-path', help='Path to the optional package policy JSON file.')
+    parser.add_argument('--openai-api-key', help='Optional OpenAI API key for generating an AI-assisted summary.')
     parser.add_argument('--debug', action='store_true', help='Enable debug reporting for allowed packages and verbose logging.')
     parser.add_argument('--markdown', action='store_true', help='Output the report as a Markdown table.')
     
     args = parser.parse_args()
 
-    audit_licenses(args.sbom_path, args.policy_path, args.package_policy_path, args.debug, args.markdown)
+    audit_licenses(args.sbom_path, args.policy_path, args.package_policy_path, args.debug, args.markdown, args.openai_api_key)

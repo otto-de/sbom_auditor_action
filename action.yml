@@ -12,7 +12,7 @@ inputs:
     required: false
     default: 'false'
   openai_api_key:
-    description: 'OpenAI API key for enriching the SBOM.'
+    description: 'Optional OpenAI API key for generating an AI-assisted summary of the license report.'
     required: false
   package_policy_path:
     description: 'Path to the optional package policy JSON file. If not provided, helpers/package_policy.json within the action will be used.'
@@ -47,7 +47,7 @@ runs:
       shell: bash
       run: |
         python -m pip install --upgrade pip
-        pip install requests tqdm
+        pip install requests tqdm openai
 
     - name: Get SBOM from GitHub API
       shell: bash
@@ -112,7 +112,13 @@ runs:
           echo "Info: No package policy file found at '$PACKAGE_POLICY_FILE'. Continuing without package-specific policies."
         fi
 
-        python ${{ github.action_path }}/helpers/audit_licenses.py sbom_enriched.json $POLICY_FILE --markdown $PACKAGE_POLICY_ARG > license-audit-report.md || AUDIT_EXIT_CODE=$?
+        # Construct the OpenAI API key argument, but only if it is provided
+        OPENAI_ARG=""
+        if [[ -n "${{ inputs.openai_api_key }}" ]]; then
+          OPENAI_ARG="--openai-api-key ${{ inputs.openai_api_key }}"
+        fi
+
+        python ${{ github.action_path }}/helpers/audit_licenses.py sbom_enriched.json $POLICY_FILE --markdown $PACKAGE_POLICY_ARG $OPENAI_ARG > license-audit-report.md || AUDIT_EXIT_CODE=$?
         
         cat license-audit-report.md >> $GITHUB_STEP_SUMMARY
         echo "AUDIT_EXIT_CODE=${AUDIT_EXIT_CODE}" >> $GITHUB_OUTPUT
