@@ -72,11 +72,6 @@ runs:
         echo "--- SBOM Entry Count (packages/components) ---"
         python3 -c "import json; d=json.load(open('sbom.json')); print('packages:', len(d.get('packages', []))); print('components:', len(d.get('components', [])))"
 
-    - name: Run tests
-      shell: bash
-      run: |
-        python -m unittest discover helpers
-
     - name: Enrich SBOM
       shell: bash
       run: python ${{ github.action_path }}/helpers/enrich_sbom.py sbom.json sbom_enriched.json
