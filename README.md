@@ -21,17 +21,21 @@ To use this action in your workflow, add the following step:
     # (Optional) If true, the workflow will fail if license violations are found.
     # fail_hard: true
 
-    # (Optional) OpenAI API key for enriching the SBOM with more accurate license data.
+    # (Optional and not implemented yet) OpenAI API key for enriching the SBOM with more accurate license data.
     # openai_api_key: ${{ secrets.OPENAI_API_KEY }}
+
+    # (Optional) Path to a custom package policy file.
+    # package_policy_path: '.github/package_policy.json'
 ```
 
 ## Inputs
 
-| Name             | Description                                                                 | Required | Default                |
-| ---------------- | --------------------------------------------------------------------------- | -------- | ---------------------- |
-| `github_token`   | GitHub token to access the dependency graph API.                            | `true`   | `${{ github.token }}` |
-| `fail_hard`      | If `true`, the action will fail if license violations are found.            | `false`  | `'false'`              |
-| `openai_api_key` | OpenAI API key for enriching the SBOM.                                      | `false`  | `''`                   |
+| Name                  | Description                                                                                                  | Required | Default                                                  |
+| --------------------- | ------------------------------------------------------------------------------------------------------------ | -------- | -------------------------------------------------------- |
+| `github_token`        | GitHub token to access the dependency graph API.                                                             | `true`   | `${{ github.token }}`                                  |
+| `fail_hard`           | If `true`, the action will fail if license violations are found.                                             | `false`  | `'false'`                                                |
+| `openai_api_key`      | OpenAI API key for enriching the SBOM.                                                                       | `false`  | `''`                                                     |
+| `package_policy_path` | Path to an optional package policy JSON file. If not provided, the action looks for a file named `package_policy.json` in the `helpers` directory of the action itself. | `false`  | `''`                                                     |
 
 ## Outputs
 
@@ -66,4 +70,45 @@ jobs:
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           fail_hard: true
+```
+
+## Advanced Configuration
+
+### Package-Specific Policies
+
+For cases where the general license-based audit is not sufficient, you can define specific policies for individual packages. This is useful for:
+
+*   Packages that are incorrectly identified as having `NO-LICENSE-FOUND`.
+*   Dependencies with non-standard license agreements.
+*   Internal packages that do not require a license audit.
+
+You can create a `package_policy.json` file in your repository and provide the path to it using the `package_policy_path` input. The policy for a package is determined by its Package URL (PURL).
+
+**Example `package_policy.json`:**
+
+```json
+{
+  "packagePolicies": [
+    {
+      "purl": "pkg:npm/left-pad@1.3.0",
+      "usagePolicy": "allow",
+      "reason": "Special agreement for this package, despite its non-standard license."
+    },
+    {
+      "purl": "pkg:pypi/internal-tool@2.5",
+      "usagePolicy": "allow",
+      "reason": "This is an internal tool, license audit is not required."
+    }
+  ]
+}
+```
+
+**Example workflow using `package_policy_path`:**
+
+```yaml
+- name: Run SBOM Auditor with Package Policies
+  uses: otto-de/sbom_auditor_action@v1
+  with:
+    github_token: ${{ secrets.GITHUB_TOKEN }}
+    package_policy_path: '.github/config/package_policy.json'
 ```

@@ -36,14 +36,29 @@ def get_purl(component):
                 return ref.get('referenceLocator')
     return "purl-not-found"
 
-def audit_component(component, policies):
+def audit_component(component, license_policies, package_policies):
     """Audits a single component and returns its single, most restrictive audit status."""
     component_name = component.get('name')
     component_version = component.get('versionInfo')
     purl = get_purl(component)
     license_concluded = component.get('licenseConcluded')
     
-    logging.debug(f"Processing component: {component_name}@{component_version}")
+    logging.debug(f"Processing component: {component_name}@{component_version} ({purl})")
+
+    # 1. Check for a specific package policy override
+    if purl in package_policies:
+        package_policy = package_policies[purl]
+        policy = package_policy.get('usagePolicy')
+        reason = package_policy.get('reason', 'N/A')
+        logging.info(f"  Found package-specific policy for {purl}: '{policy}'. Reason: {reason}")
+        return [{
+            "package": f"{component_name}@{component_version}",
+            "purl": purl,
+            "license": license_concluded or "N/A",
+            "policy": f"{policy} (package policy)"
+        }]
+
+    # 2. Continue with license-based audit if no package policy is found
     logging.debug(f"  License concluded: {license_concluded}")
 
     # Handle cases with no license
@@ -78,7 +93,7 @@ def audit_component(component, policies):
         
         found_licenses.append(license_id)
         logging.debug(f"  Checking license: {license_id}")
-        policy = policies.get(license_id)
+        policy = license_policies.get(license_id)
         
         current_policy = "needs-review (not in policy)"
         if policy:
@@ -174,7 +189,7 @@ def generate_report(denied, needs_review, allowed, debug, markdown):
 
         print("\n--- End of Report ---")
 
-def audit_licenses(sbom_path, policy_path, debug=False, markdown=False):
+def audit_licenses(sbom_path, policy_path, package_policy_path=None, debug=False, markdown=False):
     """
     Audits licenses in an SBOM file against a policy file.
     """
@@ -185,10 +200,22 @@ def audit_licenses(sbom_path, policy_path, debug=False, markdown=False):
 
     sbom_data = load_json_file(sbom_path, "SBOM")
     policy_data = load_json_file(policy_path, "Policy")
+    license_policies = {policy['id']: policy for policy in policy_data['policies']}
+    logging.debug(f"Loaded {len(license_policies)} license policies.")
 
-    policies = {policy['id']: policy for policy in policy_data['policies']}
-    logging.debug(f"Loaded {len(policies)} policies.")
-    
+    package_policies = {}
+    if package_policy_path:
+        try:
+            package_policy_data = load_json_file(package_policy_path, "Package Policy")
+            package_policies = {policy['purl']: policy for policy in package_policy_data.get('packagePolicies', [])}
+            logging.debug(f"Loaded {len(package_policies)} package-specific policies.")
+        except SystemExit as e:
+            # A SystemExit is raised by load_json_file if the file is not found.
+            # We can ignore this for the optional package policy file.
+            logging.warning(f"Package policy file not found at {package_policy_path}, continuing without it.")
+            pass
+
+
     needs_review = []
     denied = []
     allowed = []
@@ -199,13 +226,14 @@ def audit_licenses(sbom_path, policy_path, debug=False, markdown=False):
 
     components = extract_components(sbom_data)
     for component in components:
-        results = audit_component(component, policies)
+        results = audit_component(component, license_policies, package_policies)
         for result in results:
-            if result['policy'] == 'needs-review' or 'not in policy' in result['policy']:
+            policy_str = result['policy'].lower()
+            if 'needs-review' in policy_str or 'not in policy' in policy_str:
                 needs_review.append(result)
-            elif result['policy'] == 'deny':
+            elif 'deny' in policy_str:
                 denied.append(result)
-            elif result['policy'] == 'allow':
+            elif 'allow' in policy_str:
                 allowed.append(result)
 
     logging.debug("Finished processing all components.")
@@ -223,9 +251,10 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Audits licenses in an SBOM file against a policy file.')
     parser.add_argument('sbom_path', help='Path to the enriched SBOM JSON file.')
     parser.add_argument('policy_path', help='Path to the policy JSON file.')
+    parser.add_argument('--package-policy-path', help='Path to the optional package policy JSON file.')
     parser.add_argument('--debug', action='store_true', help='Enable debug reporting for allowed packages and verbose logging.')
     parser.add_argument('--markdown', action='store_true', help='Output the report as a Markdown table.')
     
     args = parser.parse_args()
 
-    audit_licenses(args.sbom_path, args.policy_path, args.debug, args.markdown)
+    audit_licenses(args.sbom_path, args.policy_path, args.package_policy_path, args.debug, args.markdown)

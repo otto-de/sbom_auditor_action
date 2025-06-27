@@ -14,6 +14,12 @@ inputs:
   openai_api_key:
     description: 'OpenAI API key for enriching the SBOM.'
     required: false
+  package_policy_path:
+    description: 'Path to the optional package policy JSON file. If not provided, helpers/package_policy.json within the action will be used.'
+    required: false
+  policy_path:
+    description: 'Path to the optional license policy JSON file. If not provided, helpers/policy.json within the action will be used.'
+    required: false
 
 outputs:
   audit_exit_code:
@@ -81,7 +87,33 @@ runs:
       shell: bash
       run: |
         AUDIT_EXIT_CODE=0
-        python ${{ github.action_path }}/helpers/audit_licenses.py sbom_enriched.json ${{ github.action_path }}/helpers/policy.json --markdown > license-audit-report.md || AUDIT_EXIT_CODE=$?
+        
+        # Determine which license policy file to use
+        POLICY_FILE="${{ inputs.policy_path }}"
+        if [[ -z "$POLICY_FILE" ]]; then
+          POLICY_FILE="${{ github.action_path }}/helpers/policy.json"
+        fi
+        if [[ ! -f "$POLICY_FILE" ]]; then
+            echo "Error: License policy file not found at '$POLICY_FILE'."
+            exit 1
+        fi
+
+        # Determine which package policy file to use
+        PACKAGE_POLICY_FILE="${{ inputs.package_policy_path }}"
+        if [[ -z "$PACKAGE_POLICY_FILE" ]]; then
+          PACKAGE_POLICY_FILE="${{ github.action_path }}/helpers/package_policy.json"
+        fi
+        
+        # Construct the package policy argument, but only if the file actually exists
+        PACKAGE_POLICY_ARG=""
+        if [[ -f "$PACKAGE_POLICY_FILE" ]]; then
+          PACKAGE_POLICY_ARG="--package-policy-path $PACKAGE_POLICY_FILE"
+        else
+          echo "Info: No package policy file found at '$PACKAGE_POLICY_FILE'. Continuing without package-specific policies."
+        fi
+
+        python ${{ github.action_path }}/helpers/audit_licenses.py sbom_enriched.json $POLICY_FILE --markdown $PACKAGE_POLICY_ARG > license-audit-report.md || AUDIT_EXIT_CODE=$?
+        
         cat license-audit-report.md >> $GITHUB_STEP_SUMMARY
         echo "AUDIT_EXIT_CODE=${AUDIT_EXIT_CODE}" >> $GITHUB_OUTPUT
 

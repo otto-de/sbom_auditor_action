@@ -1,0 +1,9 @@
+{
+    "packagePolicies": [
+        {
+            "purl": "pkg:npm/example-package@1.0.0",
+            "usagePolicy": "allow",
+            "reason": "This is an example policy. Replace with your actual package policies."
+        }
+    ]
+}
