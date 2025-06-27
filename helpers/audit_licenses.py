@@ -50,8 +50,9 @@ def find_package_policy(purl, package_policies):
             if normalized_purl == normalized_policy_purl:
                 return policy
         elif matcher == 'all-versions':
-            purl_without_version = normalized_purl.split('@')[0]
-            policy_purl_without_version = normalized_policy_purl.split('@')[0]
+            # Use rsplit to handle scoped packages like @angular/core correctly
+            purl_without_version = normalized_purl.rsplit('@', 1)[0]
+            policy_purl_without_version = normalized_policy_purl.rsplit('@', 1)[0]
             if purl_without_version == policy_purl_without_version:
                 return policy
         elif matcher == 'wildcard':
@@ -110,6 +111,9 @@ def audit_component(component, license_policies, package_policies):
     found_licenses = []
 
     for license_id in license_ids:
+        # Defensive check to prevent AttributeError on NoneType
+        if not license_id:
+            continue
         license_id = license_id.strip()
         if not license_id:
             continue

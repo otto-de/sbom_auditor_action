@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.3.1] - 2025-06-27
+
+### Fixed
+- Patched a bug in the `all-versions` matcher that caused an exception when processing scoped npm packages (e.g., `@angular/core`). The logic now correctly handles PURLs with multiple `@` symbols.
+- Added a defensive check to prevent `AttributeError` when parsing complex or malformed license strings.
+
 ## [0.3.0] - 2025-06-27
 
 ### Added
