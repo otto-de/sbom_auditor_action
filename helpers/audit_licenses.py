@@ -102,7 +102,11 @@ def audit_component(component, license_policies, package_policies):
         }]
 
     # Corrected regex to split license expressions
-    license_ids = re.split(r'\b(AND|OR|WITH)\b|\(|\)|,', license_concluded, flags=re.IGNORECASE)
+    # We are keeping this simple and not building a full SPDX parser.
+    # We split by operators and parentheses, and then check each part.
+    # We no longer split by WITH to avoid breaking up valid license IDs like 'GPL-2.0-with-classpath-exception'.
+    # We also no longer split by comma, as it's not a standard SPDX operator.
+    license_ids_raw = re.split(r'\b(AND|OR)\b|\(|\)', license_concluded, flags=re.IGNORECASE)
     
     # Determine the most restrictive policy from all parts of the license expression
     most_restrictive_policy = "allow"
@@ -110,12 +114,13 @@ def audit_component(component, license_policies, package_policies):
     
     found_licenses = []
 
-    for license_id in license_ids:
+    for license_id in license_ids_raw:
         # Defensive check to prevent AttributeError on NoneType
         if not license_id:
             continue
         license_id = license_id.strip()
-        if not license_id:
+        # Also ignore the operators themselves
+        if not license_id or license_id.upper() in ['AND', 'OR']:
             continue
         
         found_licenses.append(license_id)
