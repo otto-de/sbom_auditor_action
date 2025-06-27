@@ -2,10 +2,10 @@
 
 This GitHub Action audits Software Bill of Materials (SBOM) for license compliance. It performs the following steps:
 1.  Fetches the SBOM from the repository's dependency graph.
-2.  Enriches the SBOM with detailed license information (optionally using the OpenAI API).
+2.  Enriches the SBOM with detailed license information.
 3.  Collects the full license texts for all dependencies.
 4.  Audits the licenses against a defined policy.
-5.  Generates a license audit report.
+5.  Generates a license audit report, optionally including an AI-assisted summary.
 
 ## Usage
 
@@ -21,7 +21,7 @@ To use this action in your workflow, add the following step:
     # (Optional) If true, the workflow will fail if license violations are found.
     # fail_hard: true
 
-    # (Optional and not implemented yet) OpenAI API key for enriching the SBOM with more accurate license data.
+    # (Optional) OpenAI API key for generating an AI-assisted summary of the license report.
     # openai_api_key: ${{ secrets.OPENAI_API_KEY }}
 
     # (Optional) Path to a custom license policy file.
@@ -37,7 +37,7 @@ To use this action in your workflow, add the following step:
 | --------------------- | ------------------------------------------------------------------------------------------------------------ | -------- | -------------------------------------------------------- |
 | `github_token`        | GitHub token to access the dependency graph API.                                                             | `true`   | `${{ github.token }}`                                  |
 | `fail_hard`           | If `true`, the action will fail if license violations are found.                                             | `false`  | `'false'`                                                |
-| `openai_api_key`      | OpenAI API key for enriching the SBOM.                                                                       | `false`  | `''`                                                     |
+| `openai_api_key`      | Optional OpenAI API key for generating an AI-assisted summary of the license report.                         | `false`  | `''`                                                     |
 | `package_policy_path` | Path to an optional package policy JSON file. If not provided, the action looks for a file named `package_policy.json` in the `helpers` directory of the action itself. | `false`  | `''`                                                     |
 | `policy_path`         | Path to an optional license policy JSON file. If not provided, the action uses the `policy.json` file included with the action. | `false`  | `''`                                                     |
 
@@ -49,6 +49,29 @@ To use this action in your workflow, add the following step:
 | `license-audit-report`   | Path to the license audit report in markdown format.                     |
 | `sbom_enriched`          | Path to the enriched SBOM file.                                          |
 | `licenses_md`            | Path to the collected license texts.                                     |
+
+## AI-Assisted Summary
+
+This action can use the OpenAI API to generate an AI-assisted summary of the license audit report. This provides a high-level overview of the license landscape, potential risks, and recommendations.
+
+To enable this feature, you must provide an `openai_api_key`.
+
+### Example Summary
+
+Here is an example of what the AI-assisted summary might look like in your report:
+
+> ### AI-Assisted License Landscape Summary
+>
+> **Overall Status:**
+> The license landscape of this project is generally compliant, with the majority of dependencies using permissive licenses like MIT and Apache-2.0. There are no licenses from the "deny" list. However, there are a few licenses that fall into the "needs-review" category, which require closer inspection.
+>
+> **Key Risks:**
+> *   **`EPL-2.0`**: The Eclipse Public License 2.0 is a weak copyleft license. While it is generally acceptable for use in commercial software, it requires that any modifications to the source code be released under the same license.
+> *   **`LGPL-2.0-only`**: The GNU Lesser General Public License 2.0 is a weak copyleft license. It is more permissive than the GPL, but it still has some requirements that need to be considered.
+>
+> **Recommendations:**
+> 1.  **Review `needs-review` licenses:** Carefully examine the dependencies using `EPL-2.0` and `LGPL-2.0-only` to ensure that your use case complies with the license terms.
+> 2.  **Monitor for new dependencies:** As the project evolves, continue to monitor the licenses of new dependencies to ensure they align with your compliance policies.
 
 ## Example Workflow
 
