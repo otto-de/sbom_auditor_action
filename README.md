@@ -70,10 +70,19 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Run SBOM Auditor
+        id: sbom-audit
         uses: otto-de/sbom_auditor_action@v1
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           fail_hard: true
+
+      - name: Upload Audit Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom-audit-artifacts
+          path: |
+            ${{ steps.sbom-audit.outputs.licenses_md }}
+            ${{ steps.sbom-audit.outputs.sbom_enriched }}
 ```
 
 ## Advanced Configuration
@@ -135,4 +144,44 @@ You can specify the matching strategy using the `matcher` field in your policy r
   with:
     github_token: ${{ secrets.GITHUB_TOKEN }}
     package_policy_path: '.github/config/package_policy.json'
+```
+
+### Alternative: Committing the License Report
+
+Instead of uploading the license report as an artifact, you can configure your workflow to commit it directly to your repository. This is useful for keeping track of license changes over time in version control.
+
+**Example workflow committing the `licenses.md` file:**
+
+```yaml
+name: SBOM Audit and Commit Report
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run SBOM Auditor
+        id: sbom-audit
+        uses: otto-de/sbom_auditor_action@v1
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          fail_hard: false # Set to false to allow committing the report even with violations
+
+      - name: Organize License Report
+        run: |
+          mkdir -p licenses
+          mv ${{ steps.sbom-audit.outputs.licenses_md }} licenses/licenses.md
+        
+      - name: Commit License Report
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "docs: Update license report"
+          file_pattern: licenses/licenses.md
 ```
