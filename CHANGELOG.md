@@ -10,6 +10,7 @@ All notable changes to this project will be documented in this file.
 - Patched a bug in the `all-versions` matcher that caused an exception when processing scoped npm packages (e.g., `@angular/core`). The logic now correctly handles PURLs with multiple `@` symbols.
 - Added a defensive check to prevent `AttributeError` when parsing complex or malformed license strings.
 - Refined license expression parsing to correctly handle licenses with exceptions (e.g., `GPL-2.0-with-classpath-exception`) and avoid splitting valid license names.
+- Updated license parsing to correctly handle comma-separated license strings, ensuring each license is audited individually.
 
 ## [0.3.0] - 2025-06-27
 
