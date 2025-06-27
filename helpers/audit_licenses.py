@@ -3,6 +3,7 @@ import sys
 import argparse
 import logging
 import re
+import fnmatch
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -36,6 +37,28 @@ def get_purl(component):
                 return ref.get('referenceLocator')
     return "purl-not-found"
 
+def find_package_policy(purl, package_policies):
+    """Finds a matching package policy based on PURL and matcher logic."""
+    normalized_purl = purl.split('?')[0]
+
+    for policy in package_policies:
+        policy_purl = policy.get('purl', '')
+        matcher = policy.get('matcher', 'exact')
+        normalized_policy_purl = policy_purl.split('?')[0]
+
+        if matcher == 'exact':
+            if normalized_purl == normalized_policy_purl:
+                return policy
+        elif matcher == 'all-versions':
+            purl_without_version = normalized_purl.split('@')[0]
+            policy_purl_without_version = normalized_policy_purl.split('@')[0]
+            if purl_without_version == policy_purl_without_version:
+                return policy
+        elif matcher == 'wildcard':
+            if fnmatch.fnmatch(normalized_purl, normalized_policy_purl):
+                return policy
+    return None
+
 def audit_component(component, license_policies, package_policies):
     """Audits a single component and returns its single, most restrictive audit status."""
     component_name = component.get('name')
@@ -46,11 +69,11 @@ def audit_component(component, license_policies, package_policies):
     logging.debug(f"Processing component: {component_name}@{component_version} ({purl})")
 
     # 1. Check for a specific package policy override
-    if purl in package_policies:
-        package_policy = package_policies[purl]
+    package_policy = find_package_policy(purl, package_policies)
+    if package_policy:
         policy = package_policy.get('usagePolicy')
         reason = package_policy.get('reason', 'N/A')
-        logging.info(f"  Found package-specific policy for {purl}: '{policy}'. Reason: {reason}")
+        logging.info(f"  Found package-specific policy for {purl} using '{package_policy.get('matcher', 'exact')}' matcher on '{package_policy.get('purl')}': '{policy}'. Reason: {reason}")
         return [{
             "package": f"{component_name}@{component_version}",
             "purl": purl,
@@ -196,25 +219,24 @@ def audit_licenses(sbom_path, policy_path, package_policy_path=None, debug=False
     if debug:
         logging.getLogger().setLevel(logging.DEBUG)
 
-    logging.info(f"Starting license audit with sbom: {sbom_path}, policy: {policy_path}")
+    logging.debug(f"Starting license audit with sbom: {sbom_path}, policy: {policy_path}")
 
     sbom_data = load_json_file(sbom_path, "SBOM")
     policy_data = load_json_file(policy_path, "Policy")
     license_policies = {policy['id']: policy for policy in policy_data['policies']}
-    logging.info(f"Loaded {len(license_policies)} license policies.")
+    logging.debug(f"Loaded {len(license_policies)} license policies.")
 
-    package_policies = {}
+    package_policies = []
     if package_policy_path:
         try:
             package_policy_data = load_json_file(package_policy_path, "Package Policy")
-            package_policies = {policy['purl']: policy for policy in package_policy_data.get('packagePolicies', [])}
-            logging.info(f"Loaded {len(package_policies)} package-specific policies.")
-        except SystemExit as e:
+            package_policies = package_policy_data.get('packagePolicies', [])
+            logging.debug(f"Loaded {len(package_policies)} package-specific policies.")
+        except SystemExit:
             # A SystemExit is raised by load_json_file if the file is not found.
             # We can ignore this for the optional package policy file.
             logging.warning(f"Package policy file not found at {package_policy_path}, continuing without it.")
             pass
-
 
     needs_review = []
     denied = []

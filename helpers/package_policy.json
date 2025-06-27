@@ -1,7 +1,7 @@
 {
     "packagePolicies": [
         {
-            "purl": "pkg:npm/example-package@1.0.0",
+            "purl": "pkg:maven/org.codehaus.mojo/license-maven-plugin@2.4.0",
             "usagePolicy": "allow",
             "reason": "This is an example policy. Replace with your actual package policies."
         }

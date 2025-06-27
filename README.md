@@ -24,6 +24,9 @@ To use this action in your workflow, add the following step:
     # (Optional and not implemented yet) OpenAI API key for enriching the SBOM with more accurate license data.
     # openai_api_key: ${{ secrets.OPENAI_API_KEY }}
 
+    # (Optional) Path to a custom license policy file.
+    # policy_path: '.github/license_policy.json'
+
     # (Optional) Path to a custom package policy file.
     # package_policy_path: '.github/package_policy.json'
 ```
@@ -36,6 +39,7 @@ To use this action in your workflow, add the following step:
 | `fail_hard`           | If `true`, the action will fail if license violations are found.                                             | `false`  | `'false'`                                                |
 | `openai_api_key`      | OpenAI API key for enriching the SBOM.                                                                       | `false`  | `''`                                                     |
 | `package_policy_path` | Path to an optional package policy JSON file. If not provided, the action looks for a file named `package_policy.json` in the `helpers` directory of the action itself. | `false`  | `''`                                                     |
+| `policy_path`         | Path to an optional license policy JSON file. If not provided, the action uses the `policy.json` file included with the action. | `false`  | `''`                                                     |
 
 ## Outputs
 
@@ -84,20 +88,40 @@ For cases where the general license-based audit is not sufficient, you can defin
 
 You can create a `package_policy.json` file in your repository and provide the path to it using the `package_policy_path` input. The policy for a package is determined by its Package URL (PURL).
 
-**Example `package_policy.json`:**
+#### PURL Matching
+
+To provide maximum flexibility, the action supports different matching strategies for PURLs. The matching logic automatically **normalizes** PURLs by removing any qualifiers (e.g., `?type=jar`, `?os=windows`) before comparison, which significantly improves reliability.
+
+You can specify the matching strategy using the `matcher` field in your policy rule. If omitted, it defaults to `exact`.
+
+| Matcher          | Description                                                                                                |
+| ---------------- | ---------------------------------------------------------------------------------------------------------- |
+| `exact`          | (Default) The PURL from the SBOM must exactly match the PURL in the policy (after normalization).          |
+| `all-versions`   | Matches the package regardless of its version. The version part of the PURL is ignored during comparison.    |
+| `wildcard`       | Allows the use of `*` as a wildcard in the policy PURL. Useful for matching groups of related packages. |
+
+**Example `package_policy.json` with Matchers:**
 
 ```json
 {
   "packagePolicies": [
     {
-      "purl": "pkg:npm/left-pad@1.3.0",
+      "purl": "pkg:npm/react",
+      "matcher": "all-versions",
       "usagePolicy": "allow",
-      "reason": "Special agreement for this package, despite its non-standard license."
+      "reason": "All versions of React are approved."
     },
     {
-      "purl": "pkg:pypi/internal-tool@2.5",
+      "purl": "pkg:maven/org.apache.logging.log4j/*",
+      "matcher": "wildcard",
+      "usagePolicy": "deny",
+      "reason": "All log4j packages are denied due to security vulnerabilities."
+    },
+    {
+      "purl": "pkg:pypi/requests@2.28.1",
+      "matcher": "exact",
       "usagePolicy": "allow",
-      "reason": "This is an internal tool, license audit is not required."
+      "reason": "This specific version of requests is allowed."
     }
   ]
 }

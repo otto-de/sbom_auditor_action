@@ -4,6 +4,20 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.3.0] - 2025-06-27
+
+### Added
+- **Flexible PURL Matching**: Introduced a `matcher` field in `package_policy.json` to allow for more flexible package matching. Supported matchers are:
+  - `exact`: (Default) Matches the PURL exactly.
+  - `all-versions`: Matches a package regardless of its version.
+  - `wildcard`: Allows using `*` as a wildcard in the PURL.
+- **Custom License Policies**: Added a new optional input `policy_path` to allow users to provide their own license policy file.
+
+### Changed
+- **PURL Normalization**: The PURL matching logic now ignores qualifiers (anything after a `?`) for more reliable matching.
+- `audit_licenses.py` was significantly refactored to support the new matching logic.
+- `action.yml` was updated to include the `policy_path` input.
+
 ## [0.2.0] - 2025-06-27
 
 ### Added
