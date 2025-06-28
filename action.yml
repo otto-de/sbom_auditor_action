@@ -20,6 +20,10 @@ inputs:
   policy_path:
     description: 'Path to the optional license policy JSON file. If not provided, helpers/policy.json within the action will be used.'
     required: false
+  internal_dependency_pattern:
+    description: 'A regex pattern to identify internal dependencies that should be skipped from the audit.'
+    required: false
+    default: 'de.otto.*'
 
 outputs:
   audit_exit_code:
@@ -118,7 +122,13 @@ runs:
           OPENAI_ARG="--openai-api-key ${{ inputs.openai_api_key }}"
         fi
 
-        python ${{ github.action_path }}/helpers/audit_licenses.py sbom_enriched.json $POLICY_FILE --markdown $PACKAGE_POLICY_ARG $OPENAI_ARG > license-audit-report.md || AUDIT_EXIT_CODE=$?
+        # Construct the internal dependency pattern argument
+        INTERNAL_DEPENDENCY_PATTERN_ARG=""
+        if [[ -n "${{ inputs.internal_dependency_pattern }}" ]]; then
+          INTERNAL_DEPENDENCY_PATTERN_ARG="--internal-dependency-pattern ${{ inputs.internal_dependency_pattern }}"
+        fi
+
+        python ${{ github.action_path }}/helpers/audit_licenses.py sbom_enriched.json $POLICY_FILE --markdown $PACKAGE_POLICY_ARG $OPENAI_ARG $INTERNAL_DEPENDENCY_PATTERN_ARG > license-audit-report.md || AUDIT_EXIT_CODE=$?
         
         cat license-audit-report.md >> $GITHUB_STEP_SUMMARY
         echo "AUDIT_EXIT_CODE=${AUDIT_EXIT_CODE}" >> $GITHUB_OUTPUT

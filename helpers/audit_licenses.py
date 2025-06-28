@@ -61,12 +61,17 @@ def find_package_policy(purl, package_policies):
                 return policy
     return None
 
-def audit_component(component, license_policies, package_policies):
+def audit_component(component, license_policies, package_policies, internal_dependency_pattern=None):
     """Audits a single component and returns its single, most restrictive audit status."""
     component_name = component.get('name')
     component_version = component.get('versionInfo')
     purl = get_purl(component)
     license_concluded = component.get('licenseConcluded')
+
+    # Check if the component matches the internal dependency pattern
+    if internal_dependency_pattern and re.match(internal_dependency_pattern, purl):
+        logging.info(f"  Skipping internal dependency: {purl}")
+        return [{"package": f"{component_name}@{component_version}", "purl": purl, "policy": "internal"}]
     
     logging.debug(f"Processing component: {component_name}@{component_version} ({purl})")
 
@@ -167,7 +172,7 @@ def audit_component(component, license_policies, package_policies):
     
     return [result]
 
-def generate_report(denied, needs_review, allowed, debug, markdown, openai_api_key=None):
+def generate_report(denied, needs_review, allowed, internal, debug, markdown, openai_api_key=None):
     """Generates and prints the license audit report."""
     report = ""
     if openai_api_key:
@@ -189,6 +194,14 @@ def generate_report(denied, needs_review, allowed, debug, markdown, openai_api_k
             report += "| :--- | :--- | :--- | :--- |\n"
             for item in needs_review:
                 report += f"| `{item['package']}` | `{item['license']}` | {item['policy']} | `{item['purl']}` |\n"
+            report += "\n"
+
+        if internal:
+            report += "### SKIPPED INTERNAL PACKAGES\n\n"
+            report += "| Package | PURL |\n"
+            report += "| :--- | :--- |\n"
+            for item in internal:
+                report += f"| `{item['package']}` | `{item['purl']}` |\n"
             report += "\n"
 
         if debug and allowed:
@@ -217,6 +230,11 @@ def generate_report(denied, needs_review, allowed, debug, markdown, openai_api_k
             for item in needs_review:
                 print(f"Package: {item['package']}\n  License: {item['license']}\n  Policy: {item['policy']}\n  PURL: {item['purl']}")
 
+        if internal:
+            print("\n--- SKIPPED INTERNAL PACKAGES ---")
+            for item in internal:
+                print(f"Package: {item['package']}\n  PURL: {item['purl']}")
+
         if debug and allowed:
             print("\n--- ALLOWED PACKAGES (DEBUG) ---")
             for item in allowed:
@@ -227,7 +245,7 @@ def generate_report(denied, needs_review, allowed, debug, markdown, openai_api_k
 
         print("\n--- End of Report ---")
 
-def audit_licenses(sbom_path, policy_path, package_policy_path=None, debug=False, markdown=False, openai_api_key=None):
+def audit_licenses(sbom_path, policy_path, package_policy_path=None, debug=False, markdown=False, openai_api_key=None, internal_dependency_pattern=None):
     """
     Audits licenses in an SBOM file against a policy file.
     """
@@ -256,6 +274,7 @@ def audit_licenses(sbom_path, policy_path, package_policy_path=None, debug=False
     needs_review = []
     denied = []
     allowed = []
+    internal = []
 
     # Correctly access the nested SBOM data
     if 'sbom' in sbom_data:
@@ -263,7 +282,7 @@ def audit_licenses(sbom_path, policy_path, package_policy_path=None, debug=False
 
     components = extract_components(sbom_data)
     for component in components:
-        results = audit_component(component, license_policies, package_policies)
+        results = audit_component(component, license_policies, package_policies, internal_dependency_pattern)
         for result in results:
             policy_str = result['policy'].lower()
             if 'needs-review' in policy_str or 'not in policy' in policy_str:
@@ -272,11 +291,13 @@ def audit_licenses(sbom_path, policy_path, package_policy_path=None, debug=False
                 denied.append(result)
             elif 'allow' in policy_str:
                 allowed.append(result)
+            elif 'internal' in policy_str:
+                internal.append(result)
 
     logging.debug("Finished processing all components.")
-    logging.debug(f"Denied: {len(denied)}, Needs Review: {len(needs_review)}, Allowed: {len(allowed)}")
+    logging.debug(f"Denied: {len(denied)}, Needs Review: {len(needs_review)}, Allowed: {len(allowed)}, Internal: {len(internal)}")
 
-    generate_report(denied, needs_review, allowed, debug, markdown, openai_api_key)
+    generate_report(denied, needs_review, allowed, internal, debug, markdown, openai_api_key)
 
     if denied or needs_review:
         logging.info("Found packages that are denied or need review. Exiting with status 1.")
@@ -290,9 +311,10 @@ if __name__ == '__main__':
     parser.add_argument('policy_path', help='Path to the policy JSON file.')
     parser.add_argument('--package-policy-path', help='Path to the optional package policy JSON file.')
     parser.add_argument('--openai-api-key', help='Optional OpenAI API key for generating an AI-assisted summary.')
+    parser.add_argument('--internal-dependency-pattern', help='A regex pattern to identify internal dependencies that should be skipped from the audit.')
     parser.add_argument('--debug', action='store_true', help='Enable debug reporting for allowed packages and verbose logging.')
     parser.add_argument('--markdown', action='store_true', help='Output the report as a Markdown table.')
     
     args = parser.parse_args()
 
-    audit_licenses(args.sbom_path, args.policy_path, args.package_policy_path, args.debug, args.markdown, args.openai_api_key)
+    audit_licenses(args.sbom_path, args.policy_path, args.package_policy_path, args.debug, args.markdown, args.openai_api_key, args.internal_dependency_pattern)
