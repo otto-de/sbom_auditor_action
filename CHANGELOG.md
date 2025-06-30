@@ -4,6 +4,23 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [1.0.0] - 2025-06-30
+
+### Added
+- **AI-Assisted Summary**: Integrates with the OpenAI API to generate a high-level summary of the license audit report. This is enabled by providing the `openai_api_key` input.
+- **Configurable Internal Dependencies**: Added a new `internal_dependency_pattern` input to allow users to specify one or more regex patterns to skip internal dependencies from the audit.
+- Added a dedicated CI workflow (`.github/workflows/ci.yml`) to run unit tests on push and pull requests.
+
+### Changed
+- **OpenAI API v1.0.0+**: Updated the OpenAI integration to use the latest version of the `openai` Python library (`v1.0.0+`), moving from the legacy API.
+- The `internal_dependency_pattern` input now accepts a newline-separated list of patterns for more flexibility.
+
+### Fixed
+- Unit tests for the AI summary feature were updated to mock the new OpenAI client structure.
+
+### Removed
+- The test execution step was removed from the main `action.yml` workflow to be handled by the new dedicated CI workflow.
+
 ## [0.3.1] - 2025-06-27
 
 ### Fixed

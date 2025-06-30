@@ -4,6 +4,7 @@ import argparse
 import logging
 import re
 import fnmatch
+import os
 from ai_summary import generate_summary
 
 # Configure logging
@@ -61,17 +62,19 @@ def find_package_policy(purl, package_policies):
                 return policy
     return None
 
-def audit_component(component, license_policies, package_policies, internal_dependency_pattern=None):
+def audit_component(component, license_policies, package_policies, internal_dependency_patterns=None):
     """Audits a single component and returns its single, most restrictive audit status."""
     component_name = component.get('name')
     component_version = component.get('versionInfo')
     purl = get_purl(component)
     license_concluded = component.get('licenseConcluded')
 
-    # Check if the component matches the internal dependency pattern
-    if internal_dependency_pattern and re.match(internal_dependency_pattern, purl):
-        logging.info(f"  Skipping internal dependency: {purl}")
-        return [{"package": f"{component_name}@{component_version}", "purl": purl, "policy": "internal"}]
+    # Check if the component matches any of the internal dependency patterns
+    if internal_dependency_patterns:
+        for pattern in internal_dependency_patterns:
+            if re.match(pattern, purl):
+                logging.info(f"  Skipping internal dependency: {purl} (matches pattern: '{pattern}')")
+                return [{"package": f"{component_name}@{component_version}", "purl": purl, "policy": "internal"}]
     
     logging.debug(f"Processing component: {component_name}@{component_version} ({purl})")
 
@@ -172,6 +175,34 @@ def audit_component(component, license_policies, package_policies, internal_depe
     
     return [result]
 
+
+def generate_summary_table(total_packages, internal_packages, gh_actions_count, denied_count, needs_review_count):
+    """Generates a summary table and appends it to the GITHUB_STEP_SUMMARY file."""
+    summary_file = os.environ.get('GITHUB_STEP_SUMMARY')
+    if not summary_file:
+        logging.debug("GITHUB_STEP_SUMMARY environment variable not set. Skipping summary table generation.")
+        return
+
+    summary_content = f"""
+### License Audit Summary
+
+| Category | Count |
+| :--- | :---: |
+| Total Packages in SBOM | {total_packages} |
+| Denied Packages | {denied_count} |
+| Packages Needing Review | {needs_review_count} |
+| Internal Packages Skipped | {internal_packages} |
+| GitHub Actions | {gh_actions_count} |
+"""
+
+    try:
+        with open(summary_file, 'a', encoding='utf-8') as f:
+            f.write(summary_content)
+        logging.info(f"Successfully wrote audit summary to {summary_file}")
+    except Exception as e:
+        logging.error(f"Failed to write to GITHUB_STEP_SUMMARY file: {e}")
+
+
 def generate_report(denied, needs_review, allowed, internal, debug, markdown, openai_api_key=None):
     """Generates and prints the license audit report."""
     report = ""
@@ -245,7 +276,7 @@ def generate_report(denied, needs_review, allowed, internal, debug, markdown, op
 
         print("\n--- End of Report ---")
 
-def audit_licenses(sbom_path, policy_path, package_policy_path=None, debug=False, markdown=False, openai_api_key=None, internal_dependency_pattern=None):
+def audit_licenses(sbom_path, policy_path, package_policy_path=None, debug=False, markdown=False, openai_api_key=None, internal_dependency_patterns=None):
     """
     Audits licenses in an SBOM file against a policy file.
     """
@@ -258,6 +289,11 @@ def audit_licenses(sbom_path, policy_path, package_policy_path=None, debug=False
     policy_data = load_json_file(policy_path, "Policy")
     license_policies = {policy['id']: policy for policy in policy_data['policies']}
     logging.debug(f"Loaded {len(license_policies)} license policies.")
+
+    patterns_list = []
+    if internal_dependency_patterns:
+        patterns_list = [p.strip() for p in internal_dependency_patterns.split('\n') if p.strip()]
+        logging.debug(f"Loaded {len(patterns_list)} internal dependency patterns.")
 
     package_policies = []
     if package_policy_path:
@@ -275,6 +311,7 @@ def audit_licenses(sbom_path, policy_path, package_policy_path=None, debug=False
     denied = []
     allowed = []
     internal = []
+    gh_actions_count = 0
 
     # Correctly access the nested SBOM data
     if 'sbom' in sbom_data:
@@ -282,7 +319,12 @@ def audit_licenses(sbom_path, policy_path, package_policy_path=None, debug=False
 
     components = extract_components(sbom_data)
     for component in components:
-        results = audit_component(component, license_policies, package_policies, internal_dependency_pattern)
+        # Count GitHub Actions
+        purl = get_purl(component)
+        if purl.startswith('pkg:githubactions/'):
+            gh_actions_count += 1
+
+        results = audit_component(component, license_policies, package_policies, patterns_list)
         for result in results:
             policy_str = result['policy'].lower()
             if 'needs-review' in policy_str or 'not in policy' in policy_str:
@@ -299,6 +341,10 @@ def audit_licenses(sbom_path, policy_path, package_policy_path=None, debug=False
 
     generate_report(denied, needs_review, allowed, internal, debug, markdown, openai_api_key)
 
+    # Generate summary table for GitHub Actions summary
+    total_packages = len(components)
+    generate_summary_table(total_packages, len(internal), gh_actions_count, len(denied), len(needs_review))
+
     if denied or needs_review:
         logging.info("Found packages that are denied or need review. Exiting with status 1.")
         sys.exit(1)
@@ -311,7 +357,7 @@ if __name__ == '__main__':
     parser.add_argument('policy_path', help='Path to the policy JSON file.')
     parser.add_argument('--package-policy-path', help='Path to the optional package policy JSON file.')
     parser.add_argument('--openai-api-key', help='Optional OpenAI API key for generating an AI-assisted summary.')
-    parser.add_argument('--internal-dependency-pattern', help='A regex pattern to identify internal dependencies that should be skipped from the audit.')
+    parser.add_argument('--internal-dependency-pattern', help='A newline-separated list of regex patterns to identify internal dependencies that should be skipped from the audit.')
     parser.add_argument('--debug', action='store_true', help='Enable debug reporting for allowed packages and verbose logging.')
     parser.add_argument('--markdown', action='store_true', help='Output the report as a Markdown table.')
     

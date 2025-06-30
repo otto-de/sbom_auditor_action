@@ -21,7 +21,7 @@ inputs:
     description: 'Path to the optional license policy JSON file. If not provided, helpers/policy.json within the action will be used.'
     required: false
   internal_dependency_pattern:
-    description: 'A regex pattern to identify internal dependencies that should be skipped from the audit.'
+    description: 'A newline-separated list of regex patterns to identify internal dependencies that should be skipped from the audit.'
     required: false
     default: 'de.otto.*'
 

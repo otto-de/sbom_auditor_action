@@ -29,6 +29,11 @@ To use this action in your workflow, add the following step:
 
     # (Optional) Path to a custom package policy file.
     # package_policy_path: '.github/package_policy.json'
+
+    # (Optional) A newline-separated list of regex patterns to identify internal dependencies that should be skipped from the audit.
+    # internal_dependency_pattern: |
+    #   com.my-company.*
+    #   de.my-other-company.*
 ```
 
 ## Inputs
@@ -40,6 +45,7 @@ To use this action in your workflow, add the following step:
 | `openai_api_key`      | Optional OpenAI API key for generating an AI-assisted summary of the license report.                         | `false`  | `''`                                                     |
 | `package_policy_path` | Path to an optional package policy JSON file. If not provided, the action looks for a file named `package_policy.json` in the `helpers` directory of the action itself. | `false`  | `''`                                                     |
 | `policy_path`         | Path to an optional license policy JSON file. If not provided, the action uses the `policy.json` file included with the action. | `false`  | `''`                                                     |
+| `internal_dependency_pattern` | A regex pattern to identify internal dependencies that should be skipped from the audit.                   | `false`  | `'de.otto.*'`                                            |
 
 ## Outputs
 
@@ -119,6 +125,23 @@ For cases where the general license-based audit is not sufficient, you can defin
 *   Internal packages that do not require a license audit.
 
 You can create a `package_policy.json` file in your repository and provide the path to it using the `package_policy_path` input. The policy for a package is determined by its Package URL (PURL).
+
+### Skipping Internal Dependencies
+
+To skip internal dependencies from the audit, you can use the `internal_dependency_pattern` input. This input accepts a regular expression that is matched against the PURL of each dependency. If the PURL matches the pattern, the dependency is skipped.
+
+**Example workflow skipping internal dependencies:**
+
+```yaml
+- name: Run SBOM Auditor and Skip Internal Dependencies
+  uses: otto-de/sbom_auditor_action@v1
+  with:
+    github_token: ${{ secrets.GITHUB_TOKEN }}
+    internal_dependency_pattern: |
+      com.my-company.*
+      de.my-other-company.*
+```
+
 
 #### PURL Matching
 
