@@ -5,7 +5,7 @@ This GitHub Action audits Software Bill of Materials (SBOM) for license complian
 2.  Enriches the SBOM with detailed license information.
 3.  Collects the full license texts for all dependencies.
 4.  Audits the licenses against a defined policy.
-5.  Generates a license audit report, optionally including an AI-assisted summary.
+5.  Generates a license audit report, optionally including an AI-assisted summary using OpenAI, Azure OpenAI, or AWS Bedrock.
 
 ## Usage
 
@@ -21,8 +21,21 @@ To use this action in your workflow, add the following step:
     # (Optional) If true, the workflow will fail if license violations are found.
     # fail_hard: true
 
-    # (Optional) OpenAI API key for generating an AI-assisted summary of the license report.
+    # (Optional) API key for AI-assisted summary generation.
     # openai_api_key: ${{ secrets.OPENAI_API_KEY }}
+
+    # (Optional) AI provider to use for summary generation.
+    # ai_provider: 'openai'  # Options: openai, azure, bedrock
+
+    # (Optional) Azure OpenAI specific configuration
+    # azure_endpoint: ${{ secrets.AZURE_OPENAI_ENDPOINT }}
+    # azure_deployment: ${{ secrets.AZURE_OPENAI_DEPLOYMENT }}
+
+    # (Optional) AWS Bedrock specific configuration
+    # aws_region: 'us-east-1'
+
+    # (Optional) Specific AI model name to use
+    # ai_model_name: 'gpt-4'
 
     # (Optional) Path to a custom license policy file.
     # policy_path: '.github/license_policy.json'
@@ -42,10 +55,15 @@ To use this action in your workflow, add the following step:
 | --------------------- | ------------------------------------------------------------------------------------------------------------ | -------- | -------------------------------------------------------- |
 | `github_token`        | GitHub token to access the dependency graph API.                                                             | `true`   | `${{ github.token }}`                                  |
 | `fail_hard`           | If `true`, the action will fail if license violations are found.                                             | `false`  | `'false'`                                                |
-| `openai_api_key`      | Optional OpenAI API key for generating an AI-assisted summary of the license report.                         | `false`  | `''`                                                     |
+| `openai_api_key`      | API key for AI-assisted summary generation. Use with `ai_provider` input to specify the provider.          | `false`  | `''`                                                     |
+| `ai_provider`         | AI provider to use for summary generation. Options: `openai`, `azure`, `bedrock`.                          | `false`  | `'openai'`                                               |
+| `azure_endpoint`      | Azure OpenAI endpoint URL (required when `ai_provider` is `azure`).                                        | `false`  | `''`                                                     |
+| `azure_deployment`    | Azure OpenAI deployment name (required when `ai_provider` is `azure`).                                     | `false`  | `''`                                                     |
+| `aws_region`          | AWS region for Bedrock (required when `ai_provider` is `bedrock`).                                         | `false`  | `''`                                                     |
+| `ai_model_name`       | Specific AI model name to use (optional, provider-specific defaults will be used).                         | `false`  | `''`                                                     |
 | `package_policy_path` | Path to an optional package policy JSON file. If not provided, the action looks for a file named `package_policy.json` in the `helpers` directory of the action itself. | `false`  | `''`                                                     |
 | `policy_path`         | Path to an optional license policy JSON file. If not provided, the action uses the `policy.json` file included with the action. | `false`  | `''`                                                     |
-| `internal_dependency_pattern` | A regex pattern to identify internal dependencies that should be skipped from the audit.                   | `false`  | `'de.otto.*'`                                            |
+| `internal_dependency_pattern` | A newline-separated list of regex patterns to identify internal dependencies that should be skipped from the audit. | `false`  | `'de.otto.*'`                                            |
 
 ## Outputs
 
@@ -78,6 +96,54 @@ Here is an example of what the AI-assisted summary might look like in your repor
 > **Recommendations:**
 > 1.  **Review `needs-review` licenses:** Carefully examine the dependencies using `EPL-2.0` and `LGPL-2.0-only` to ensure that your use case complies with the license terms.
 > 2.  **Monitor for new dependencies:** As the project evolves, continue to monitor the licenses of new dependencies to ensure they align with your compliance policies.
+
+## AI-Assisted Summary Examples
+
+The action supports multiple AI providers for generating intelligent license compliance summaries. Each provider has its own configuration requirements:
+
+### OpenAI (Default)
+
+```yaml
+- name: SBOM Audit with OpenAI
+  uses: otto-de/sbom_auditor_action@v1
+  with:
+    github_token: ${{ secrets.GITHUB_TOKEN }}
+    openai_api_key: ${{ secrets.OPENAI_API_KEY }}
+    ai_provider: 'openai'
+    ai_model_name: 'gpt-4'  # Optional: defaults to gpt-3.5-turbo
+```
+
+### Azure OpenAI
+
+```yaml
+- name: SBOM Audit with Azure OpenAI
+  uses: otto-de/sbom_auditor_action@v1
+  with:
+    github_token: ${{ secrets.GITHUB_TOKEN }}
+    openai_api_key: ${{ secrets.AZURE_OPENAI_API_KEY }}
+    ai_provider: 'azure'
+    azure_endpoint: ${{ secrets.AZURE_OPENAI_ENDPOINT }}
+    azure_deployment: ${{ secrets.AZURE_OPENAI_DEPLOYMENT }}
+```
+
+### AWS Bedrock
+
+```yaml
+- name: SBOM Audit with AWS Bedrock
+  uses: otto-de/sbom_auditor_action@v1
+  with:
+    github_token: ${{ secrets.GITHUB_TOKEN }}
+    ai_provider: 'bedrock'
+    aws_region: 'us-east-1'
+    ai_model_name: 'anthropic.claude-3-5-sonnet-20241022-v2:0'  # Optional
+  env:
+    # AWS credentials can be provided via environment variables
+    AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+    AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+    # Or use IAM roles for authentication
+```
+
+**Note for AWS Bedrock:** You can either provide the AWS access key via the `openai_api_key` input (in which case you must also set `AWS_SECRET_ACCESS_KEY` as an environment variable), or use environment variables for AWS credentials, or rely on IAM roles if running on AWS infrastructure.
 
 ## Example Workflow
 

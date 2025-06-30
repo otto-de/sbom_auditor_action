@@ -1,0 +1,22 @@
+{
+    "packagePolicies": [
+        {
+            "purl": "pkg:npm/react",
+            "matcher": "all-versions",
+            "usagePolicy": "allow",
+            "reason": "All versions of React are approved."
+        },
+        {
+            "purl": "pkg:maven/org.apache.logging.log4j/*",
+            "matcher": "wildcard",
+            "usagePolicy": "deny",
+            "reason": "All log4j packages are denied due to security vulnerabilities."
+        },
+        {
+            "purl": "pkg:pypi/requests@2.28.1",
+            "matcher": "exact",
+            "usagePolicy": "allow",
+            "reason": "This specific version of requests is allowed."
+        }
+    ]
+}

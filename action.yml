@@ -12,7 +12,23 @@ inputs:
     required: false
     default: 'false'
   openai_api_key:
-    description: 'Optional OpenAI API key for generating an AI-assisted summary of the license report.'
+    description: 'API key for AI-assisted summary generation. Use with ai_provider input to specify the provider.'
+    required: false
+  ai_provider:
+    description: 'AI provider to use for summary generation. Options: openai, azure, bedrock.'
+    required: false
+    default: 'openai'
+  azure_endpoint:
+    description: 'Azure OpenAI endpoint URL (required when ai_provider is "azure").'
+    required: false
+  azure_deployment:
+    description: 'Azure OpenAI deployment name (required when ai_provider is "azure").'
+    required: false
+  aws_region:
+    description: 'AWS region for Bedrock (required when ai_provider is "bedrock").'
+    required: false
+  ai_model_name:
+    description: 'Specific AI model name to use (optional, provider-specific defaults will be used).'
     required: false
   package_policy_path:
     description: 'Path to the optional package policy JSON file. If not provided, helpers/package_policy.json within the action will be used.'
@@ -51,7 +67,7 @@ runs:
       shell: bash
       run: |
         python -m pip install --upgrade pip
-        pip install requests tqdm openai
+        pip install requests tqdm openai boto3
 
     - name: Get SBOM from GitHub API
       shell: bash
@@ -122,13 +138,32 @@ runs:
           OPENAI_ARG="--openai-api-key ${{ inputs.openai_api_key }}"
         fi
 
+        # Construct AI provider arguments
+        AI_PROVIDER_ARGS="--ai-provider ${{ inputs.ai_provider }}"
+        
+        if [[ -n "${{ inputs.azure_endpoint }}" ]]; then
+          AI_PROVIDER_ARGS="$AI_PROVIDER_ARGS --azure-endpoint ${{ inputs.azure_endpoint }}"
+        fi
+        
+        if [[ -n "${{ inputs.azure_deployment }}" ]]; then
+          AI_PROVIDER_ARGS="$AI_PROVIDER_ARGS --azure-deployment ${{ inputs.azure_deployment }}"
+        fi
+        
+        if [[ -n "${{ inputs.aws_region }}" ]]; then
+          AI_PROVIDER_ARGS="$AI_PROVIDER_ARGS --aws-region ${{ inputs.aws_region }}"
+        fi
+        
+        if [[ -n "${{ inputs.ai_model_name }}" ]]; then
+          AI_PROVIDER_ARGS="$AI_PROVIDER_ARGS --ai-model-name ${{ inputs.ai_model_name }}"
+        fi
+
         # Construct the internal dependency pattern argument
         INTERNAL_DEPENDENCY_PATTERN_ARG=""
         if [[ -n "${{ inputs.internal_dependency_pattern }}" ]]; then
           INTERNAL_DEPENDENCY_PATTERN_ARG="--internal-dependency-pattern ${{ inputs.internal_dependency_pattern }}"
         fi
 
-        python ${{ github.action_path }}/helpers/audit_licenses.py sbom_enriched.json $POLICY_FILE --markdown $PACKAGE_POLICY_ARG $OPENAI_ARG $INTERNAL_DEPENDENCY_PATTERN_ARG > license-audit-report.md || AUDIT_EXIT_CODE=$?
+        python ${{ github.action_path }}/helpers/audit_licenses.py sbom_enriched.json $POLICY_FILE --markdown $PACKAGE_POLICY_ARG $OPENAI_ARG $AI_PROVIDER_ARGS $INTERNAL_DEPENDENCY_PATTERN_ARG > license-audit-report.md || AUDIT_EXIT_CODE=$?
         
         cat license-audit-report.md >> $GITHUB_STEP_SUMMARY
         echo "AUDIT_EXIT_CODE=${AUDIT_EXIT_CODE}" >> $GITHUB_OUTPUT

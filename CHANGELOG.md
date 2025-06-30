@@ -4,6 +4,21 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+- **Multi-Provider AI Support**: Expanded AI-assisted summary to support OpenAI, Azure OpenAI, and AWS Bedrock
+  - Added `ai_provider` input to select between providers (openai, azure, bedrock)
+  - Added `azure_endpoint` and `azure_deployment` inputs for Azure OpenAI configuration
+  - Added `aws_region` input for AWS Bedrock configuration
+  - Added `ai_model_name` input to specify custom models for each provider
+  - Updated dependencies to include `boto3` for AWS Bedrock support
+- **Enhanced AI Prompts**: Improved AI prompt structure for more detailed license compliance analysis
+- **Provider-Specific Error Handling**: Each AI provider has tailored error handling and fallback mechanisms
+
+### Changed
+- Renamed `openai_api_key` input description to be provider-agnostic
+- Updated README.md with comprehensive examples for all three AI providers
+- Enhanced test coverage for multi-provider functionality
+
 ## [1.0.0] - 2025-06-30
 
 ### Added

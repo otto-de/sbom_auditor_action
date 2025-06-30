@@ -207,11 +207,11 @@ def generate_summary_table(total_packages, internal_packages, gh_actions_count, 
         logging.error(f"Failed to write to GITHUB_STEP_SUMMARY file: {e}")
 
 
-def generate_report(denied, needs_review, allowed, internal, debug, markdown, openai_api_key=None):
+def generate_report(denied, needs_review, allowed, internal, debug, markdown, openai_api_key=None, ai_provider="openai", azure_endpoint=None, azure_deployment=None, aws_region=None, ai_model_name=None):
     """Generates and prints the license audit report."""
     report = ""
     if openai_api_key:
-        report += generate_summary(openai_api_key, denied, needs_review)
+        report += generate_summary(openai_api_key, denied, needs_review, ai_provider, azure_endpoint, azure_deployment, aws_region, ai_model_name)
 
     if markdown:
         report += "## License Audit Report\n\n"
@@ -280,7 +280,7 @@ def generate_report(denied, needs_review, allowed, internal, debug, markdown, op
 
         print("\n--- End of Report ---")
 
-def audit_licenses(sbom_path, policy_path, package_policy_path=None, debug=False, markdown=False, openai_api_key=None, internal_dependency_patterns=None):
+def audit_licenses(sbom_path, policy_path, package_policy_path=None, debug=False, markdown=False, openai_api_key=None, internal_dependency_patterns=None, ai_provider="openai", azure_endpoint=None, azure_deployment=None, aws_region=None, ai_model_name=None):
     """
     Audits licenses in an SBOM file against a policy file.
     """
@@ -343,7 +343,7 @@ def audit_licenses(sbom_path, policy_path, package_policy_path=None, debug=False
     logging.debug("Finished processing all components.")
     logging.debug(f"Denied: {len(denied)}, Needs Review: {len(needs_review)}, Allowed: {len(allowed)}, Internal: {len(internal)}")
 
-    generate_report(denied, needs_review, allowed, internal, debug, markdown, openai_api_key)
+    generate_report(denied, needs_review, allowed, internal, debug, markdown, openai_api_key, ai_provider, azure_endpoint, azure_deployment, aws_region, ai_model_name)
 
     # Generate summary table for GitHub Actions summary
     total_packages = len(components)
@@ -361,10 +361,15 @@ if __name__ == '__main__':
     parser.add_argument('policy_path', help='Path to the policy JSON file.')
     parser.add_argument('--package-policy-path', help='Path to the optional package policy JSON file.')
     parser.add_argument('--openai-api-key', help='Optional OpenAI API key for generating an AI-assisted summary.')
+    parser.add_argument('--ai-provider', default='openai', choices=['openai', 'azure', 'bedrock'], help='AI provider to use for summary generation.')
+    parser.add_argument('--azure-endpoint', help='Azure OpenAI endpoint URL (required for azure provider).')
+    parser.add_argument('--azure-deployment', help='Azure OpenAI deployment name (required for azure provider).')
+    parser.add_argument('--aws-region', help='AWS region for Bedrock (required for bedrock provider).')
+    parser.add_argument('--ai-model-name', help='Specific AI model name to use (optional, provider-specific defaults will be used).')
     parser.add_argument('--internal-dependency-pattern', help='A newline-separated list of regex patterns to identify internal dependencies that should be skipped from the audit.')
     parser.add_argument('--debug', action='store_true', help='Enable debug reporting for allowed packages and verbose logging.')
     parser.add_argument('--markdown', action='store_true', help='Output the report as a Markdown table.')
     
     args = parser.parse_args()
 
-    audit_licenses(args.sbom_path, args.policy_path, args.package_policy_path, args.debug, args.markdown, args.openai_api_key, args.internal_dependency_pattern)
+    audit_licenses(args.sbom_path, args.policy_path, args.package_policy_path, args.debug, args.markdown, args.openai_api_key, args.internal_dependency_pattern, args.ai_provider, args.azure_endpoint, args.azure_deployment, args.aws_region, args.ai_model_name)
