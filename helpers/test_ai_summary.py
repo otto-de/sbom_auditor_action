@@ -1,3 +1,7 @@
+#!/usr/bin/env python3
+# Copyright (c) 2025 Otto GmbH & Co KG
+# SPDX-License-Identifier: MIT
+
 import unittest
 from unittest.mock import patch, MagicMock
 from helpers.ai_summary import generate_summary

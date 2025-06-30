@@ -1,3 +1,7 @@
+#!/usr/bin/env python3
+# Copyright (c) 2025 Otto GmbH & Co KG
+# SPDX-License-Identifier: MIT
+
 from openai import OpenAI
 import logging
 
