@@ -6,14 +6,16 @@ import json
 import requests
 import argparse
 import logging
+import os
 from tqdm import tqdm
 import urllib.parse
 from urllib.parse import quote
 from cache_manager import SBOMCacheManager
 
 def enrich_sbom_with_depsdev(input_sbom_path, output_sbom_path, cache_ttl_hours=168):
-    # Initialize cache manager
-    cache_manager = SBOMCacheManager(cache_ttl_hours=cache_ttl_hours)
+    # Initialize cache manager with GitHub token for org-wide caching
+    github_token = os.getenv('GITHUB_TOKEN')
+    cache_manager = SBOMCacheManager(cache_ttl_hours=cache_ttl_hours, github_token=github_token)
     cache_stats = cache_manager.get_cache_stats()
     logging.info(f"Cache initialized: {cache_stats['valid_entries']} valid entries, {cache_stats['expired_entries']} expired")
     

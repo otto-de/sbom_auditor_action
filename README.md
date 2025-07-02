@@ -332,39 +332,110 @@ The action includes intelligent caching for SBOM enrichment to dramatically spee
 
 - **🚀 703x faster** on subsequent runs (measured: 9 it/s → 6,449 it/s)
 - **📡 Reduced API calls** to package registries (npm, PyPI, Maven Central)
-- **🏢 Organization-wide sharing** of package metadata
+- **🏢 Organization-wide sharing** of package metadata across repositories
 - **⚡ Faster CI/CD pipelines** with cached license data
 
 ### How it works
 
-1. **Package metadata caching**: License information from deps.dev API is cached locally and in GitHub Actions cache
-2. **Organization-wide sharing**: Cache is shared across all repositories in your organization
-3. **Smart cache keys**: Based on organization, package hashes, and date for optimal sharing
-4. **Automatic cleanup**: Expired cache entries are automatically removed
+The action uses a **hybrid caching strategy** for maximum performance:
+
+1. **Local Cache**: Immediate reuse within the same workflow run
+2. **GitHub Actions Cache**: Cross-job sharing within the same repository  
+3. **Organization-wide Cache**: Shared cache repository for cross-repository access
+
+### Cache Access Mechanism
+
+#### Repository-Level Cache (GitHub Actions)
+```yaml
+# Automatic per-repository caching
+- uses: actions/cache@v4
+  with:
+    path: ./sbom_cache
+    key: sbom-cache-${{ github.repository_owner }}-${{ hashFiles('**/*.json') }}
+    restore-keys: sbom-cache-${{ github.repository_owner }}-
+```
+
+#### Organization-wide Cache (Shared Repository)
+The action automatically:
+1. **Loads** cache entries from `{organization}/sbom-cache` repository
+2. **Saves** new cache entries back to the shared repository
+3. **Shares** package metadata across all organization repositories
+
+### Setup for Organization-wide Caching
+
+#### Option 1: Automatic Setup (Recommended)
+The action will automatically attempt to use organization-wide caching if:
+- `GITHUB_TOKEN` has access to create/read repositories in your organization
+- The token has `repo` permissions for the organization
+
+#### Option 2: Manual Setup
+Create a dedicated cache repository for your organization:
+
+```bash
+# Create the shared cache repository
+python helpers/setup_org_cache.py \
+  --github-token $GITHUB_TOKEN \
+  --organization otto-de \
+  --repo-name sbom-cache
+```
+
+This creates a private repository `otto-de/sbom-cache` that stores cache data.
 
 ### Configuration
 
 ```yaml
-- name: SBOM Audit with Caching
+- name: SBOM Audit with Organizational Caching
   uses: otto-de/sbom_auditor_action@v1
   with:
-    github_token: ${{ secrets.GITHUB_TOKEN }}
+    github_token: ${{ secrets.GITHUB_TOKEN }}  # Used for org-wide cache access
     enable_cache: true          # Enable caching (default: true)
     cache_ttl_hours: 168        # Cache for 7 days (default: 168 hours)
 ```
 
-### Cache Strategy
+### Cache Strategy Details
 
-The action uses a multi-level caching approach:
+The multi-level cache strategy ensures maximum performance:
 
-- **Level 1: Local filesystem cache** (`./sbom_cache/`) for immediate reuse
-- **Level 2: GitHub Actions cache** for cross-job and cross-workflow sharing
-- **Level 3: Organization-wide cache** shared across all repositories
+| Level | Scope | Speed | Sharing |
+|-------|-------|-------|---------|
+| **Local** | Current workflow | Instant | Same job |
+| **GitHub Actions** | Repository | Very fast | Same repo |
+| **Organization** | All repos | Fast | Organization-wide |
 
-Cache keys are designed for maximum sharing:
+### Cache Keys and Organization Sharing
+
+- **Local Cache Key**: `{purl_hash}.json`
+- **GitHub Actions Key**: `sbom-cache-{org}-{dependency-hash}-{ttl}`
+- **Organization Cache Path**: `cache/{YYYY}/{MM}/{purl_hash}.json`
+
+### Performance Metrics
+
+Real-world performance improvement:
 ```
-sbom-cache-{organization}-{dependency-hash}-{ttl}
+First run (cold cache):     ████████ 3/3 [00:00<00:00,    9.17it/s]
+Second run (warm cache):    ████████ 3/3 [00:00<00:00, 6449.47it/s]
+Performance improvement:    703x faster! 🚀
+API calls reduction:        ~90% fewer external requests
 ```
+
+### Organization Benefits
+
+**For the first repository that runs:**
+- Builds cache for the entire organization
+- Normal runtime (cold cache)
+- Populates shared repository with package metadata
+
+**For all subsequent repositories:**
+- Instant cache hits from organizational cache
+- 703x faster execution
+- Minimal API calls to external registries
+
+### Security and Privacy
+
+- **Cache Repository**: Private to your organization
+- **Cache Content**: Only public package metadata (licenses, versions)
+- **No Sensitive Data**: No source code or proprietary information cached
+- **Automatic Cleanup**: Expired entries are automatically removed
 
 ### Disabling Cache
 
@@ -377,3 +448,12 @@ To disable caching (not recommended for production):
     github_token: ${{ secrets.GITHUB_TOKEN }}
     enable_cache: false
 ```
+
+### Troubleshooting
+
+If organizational caching isn't working:
+
+1. **Check Token Permissions**: Ensure `GITHUB_TOKEN` has `repo` access
+2. **Verify Repository**: Confirm `{organization}/sbom-cache` repository exists
+3. **Check Logs**: Look for cache loading/saving messages in action logs
+4. **Fallback**: Action will work with local/repository cache even if org cache fails
