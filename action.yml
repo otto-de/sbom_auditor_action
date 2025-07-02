@@ -159,6 +159,9 @@ runs:
         OPENAI_ARG=""
         if [[ -n "${{ inputs.openai_api_key }}" ]]; then
           OPENAI_ARG="--openai-api-key ${{ inputs.openai_api_key }}"
+        elif [[ "${{ inputs.ai_provider }}" == "github" && -n "${{ inputs.github_token }}" ]]; then
+          # For GitHub Models, use the github_token as the API key
+          OPENAI_ARG="--openai-api-key ${{ inputs.github_token }}"
         fi
 
         # Construct AI provider arguments

@@ -104,7 +104,28 @@ This directory contains cached SBOM enrichment data organized by date.
 Last updated: Auto-managed by SBOM Auditor Action
 ```
 
-### Step 5: Configure Repository Settings
+### Step 5: Configure Repository Permissions 🔐
+
+**IMPORTANT**: Configure permissions so GitHub Actions can write to the cache repository.
+
+Go to **Settings** → **Actions** → **General** in `otto-ec/sbom-cache`:
+
+#### Workflow Permissions:
+- ✅ **Read and write permissions**
+- ✅ **Allow GitHub Actions to create and approve pull requests**
+
+#### Actions Permissions:
+- ✅ **Allow all actions and reusable workflows**
+
+#### Organization-Level Settings:
+1. Go to `https://github.com/organizations/otto-ec/settings/actions`
+2. Under **Workflow permissions**:
+   - ✅ **Read and write permissions**
+   - ✅ **Allow GitHub Actions to create and approve pull requests**
+
+**Why this is needed**: GitHub Actions need write access to create/update cache files in the shared repository.
+
+### Step 6: Configure Repository Settings
 
 Go to **Settings** in the `otto-ec/sbom-cache` repository and configure:
 
@@ -155,6 +176,64 @@ After setup, you can verify the cache is working by:
    Loaded Z cache entries from organizational cache
    ```
 3. Check `otto-ec/sbom-cache` repository for auto-generated cache files
+
+## 🧪 Test Cache Access
+
+After setup, test if the cache repository is properly configured:
+
+### Quick Test Workflow
+
+Create a test workflow in any otto-ec repository:
+
+```yaml
+name: Test SBOM Cache Access
+on: workflow_dispatch
+
+jobs:
+  test-cache:
+    runs-on: ubuntu-latest
+    
+    permissions:
+      contents: read
+      
+    steps:
+      - name: Test Cache Repository Access
+        run: |
+          echo "Testing cache repository access..."
+          
+          # Test basic repository access
+          curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            "https://api.github.com/repos/otto-ec/sbom-cache" > /dev/null
+          
+          if [ $? -eq 0 ]; then
+            echo "✅ Cache repository is accessible"
+          else
+            echo "❌ Cache repository access failed"
+            exit 1
+          fi
+
+      - name: Test SBOM Auditor Action with Cache
+        uses: otto-de/sbom_auditor_action@v1
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          enable_cache: true
+          # This will test the actual cache read/write functionality
+```
+
+### Expected Output
+
+If permissions are correct, you should see:
+```
+Cache manager initialized: dir=./sbom_cache, ttl=168h, org=otto-ec, org_cache=true
+Loaded X cache entries from organizational cache
+```
+
+### Troubleshooting
+
+If you see errors like:
+- `"Resource not accessible by integration"` → Check workflow permissions
+- `"Not Found"` → Verify repository exists and is accessible
+- `"API rate limit exceeded"` → Wait and retry, or use GitHub App authentication
 
 ## 🛠 Troubleshooting
 

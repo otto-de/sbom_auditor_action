@@ -21,6 +21,8 @@ jobs:
       contents: read
       # Required for organizational cache access
       packages: read
+      # CRITICAL: Required for GitHub Models AI Summary
+      models: read
       
     steps:
       - name: Checkout code
@@ -34,6 +36,9 @@ jobs:
           # Enable organizational caching for otto-ec
           enable_cache: true
           cache_ttl_hours: 168  # 7 days
+          # IMPORTANT: For GitHub Models, use ai_provider: 'github'
+          ai_provider: 'github'
+          ai_model_name: 'openai/gpt-4o-mini'
           # Fail on license violations
           fail_hard: true
           # Internal dependency patterns for otto-ec
@@ -72,7 +77,7 @@ jobs:
       contents: read
       # Required for organizational cache access
       packages: read
-      # Required for GitHub Models AI
+      # CRITICAL: Required for GitHub Models AI
       models: read
       
     steps:
@@ -290,3 +295,96 @@ With organizational caching enabled:
 - **API call reduction**: 90%+ fewer external requests
 
 The cache will be shared across all otto-ec repositories automatically!
+
+## 🔧 Troubleshooting GitHub Models AI Summary
+
+### Problem: AI Summary nicht sichtbar trotz `ai_provider: 'github'`
+
+#### ✅ **Lösung 1: Workflow-Berechtigung hinzufügen**
+
+**KRITISCH**: Fügen Sie `models: read` zu Ihren Workflow-Berechtigungen hinzu:
+
+```yaml
+permissions:
+  contents: read
+  models: read  # ← ERFORDERLICH für GitHub Models
+  packages: read  # Optional: für Cache-Zugriff
+```
+
+#### ✅ **Lösung 2: Vollständiges Workflow-Beispiel**
+
+```yaml
+name: SBOM Audit with GitHub Models
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      models: read  # KRITISCH!
+    steps:
+      - uses: actions/checkout@v4
+      - uses: otto-de/sbom_auditor_action@v1
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          ai_provider: 'github'
+          ai_model_name: 'openai/gpt-4o-mini'
+```
+
+#### ✅ **Lösung 3: Organisation-Einstellungen prüfen**
+
+1. Gehen Sie zu: `https://github.com/organizations/otto-ec/settings/actions`
+2. Unter **"Workflow permissions"**:
+   - ✅ **"Read and write permissions"**
+3. Stellen Sie sicher, dass **GitHub Models für otto-ec aktiviert** ist
+
+#### ✅ **Lösung 4: Debug-Informationen sammeln**
+
+Fügen Sie diesen Debug-Step zu Ihrem Workflow hinzu:
+
+```yaml
+- name: Debug GitHub Models
+  run: |
+    echo "🔍 GitHub Models Debug Info"
+    echo "GITHUB_TOKEN length: ${#GITHUB_TOKEN}"
+    echo "Testing GitHub Models API..."
+    curl -s -H "Authorization: Bearer $GITHUB_TOKEN" \
+         -H "Content-Type: application/json" \
+         -d '{"messages":[{"role":"user","content":"test"}],"model":"openai/gpt-4o-mini","max_tokens":1}' \
+         https://models.github.ai/inference/chat/completions \
+         || echo "API test failed"
+  env:
+    GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+```
+
+#### 🚨 **Häufige Fehler:**
+
+| Problem | Symptom | Lösung |
+|---------|---------|--------|
+| **Fehlende Permission** | Keine AI Summary | `models: read` hinzufügen |
+| **Falsche Provider** | Keine AI Summary | `ai_provider: 'github'` verwenden |
+| **GitHub Models deaktiviert** | 403 Forbidden | Admin kontaktieren |
+| **Falscher Token** | 401 Unauthorized | `github_token: ${{ secrets.GITHUB_TOKEN }}` |
+
+#### 📋 **Komplette Checkliste:**
+
+```bash
+# Diese Befehle in GitHub Actions ausführen:
+echo "✅ GITHUB_TOKEN: ${GITHUB_TOKEN:0:8}..."
+echo "✅ Workflow Permissions: ${{ toJson(github.permissions) }}"
+echo "✅ AI Provider: ${{ inputs.ai_provider }}"
+echo "✅ Model Name: ${{ inputs.ai_model_name }}"
+```
+
+### **Nach dem Fix sollten Sie sehen:**
+
+```
+✅ Successfully generated AI summary using GitHub Models
+📄 Generated Summary:
+----------------------------------------
+### AI-Assisted Summary (GitHub Models)
+
+# License Audit Report Summary
+...
+----------------------------------------
+```
