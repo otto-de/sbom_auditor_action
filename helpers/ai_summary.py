@@ -52,7 +52,7 @@ def _build_prompt(denied_list, needs_review_list):
     prompt = """You are an expert in software license compliance, tasked with providing a high-level summary of a license audit report for a software project.
 Your audience includes developers, project managers, and legal counsel. The summary should be clear, concise, and actionable.
 
-Please structure your summary in Markdown format with the following sections:
+Please provide your response in clean Markdown format with the following sections. Do NOT wrap your response in code blocks or ```markdown``` tags:
 
 ### Overall Status
 Provide a brief, one-sentence overview of the license compliance status.
@@ -281,6 +281,17 @@ def _clean_markdown_formatting(text):
     """Clean up markdown formatting in AI-generated text."""
     if not text:
         return text
+    
+    # Remove markdown code block wrappers if present
+    text = text.strip()
+    if text.startswith('```markdown') and text.endswith('```'):
+        # Remove the markdown code block wrapper
+        text = text[11:-3].strip()  # Remove ```markdown and ```
+    elif text.startswith('```') and text.endswith('```'):
+        # Remove generic code block wrapper
+        lines = text.split('\n')
+        if len(lines) > 2:
+            text = '\n'.join(lines[1:-1])  # Remove first and last line
     
     lines = text.split('\n')
     cleaned_lines = []
