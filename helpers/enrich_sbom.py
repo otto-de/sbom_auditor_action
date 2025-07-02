@@ -78,13 +78,13 @@ def enrich_sbom_with_depsdev(input_sbom_path, output_sbom_path, cache_ttl_hours=
             cached_data = cache_manager.get_cached_package_info(clean_purl)
             if cached_data:
                 licenses = cached_data.get('licenses', [])
-                pkg["licenseConcluded"] = licenses[0] if licenses else "UNKNOWN"
-                
-                # Add detailed logging for cache hits
+                # FIXED: Use same logic for cache hits and misses
                 if licenses:
-                    logging.debug(f"CACHE HIT: {clean_purl} -> {licenses[0]} (from cache)")
+                    pkg["licenseConcluded"] = ",".join(licenses)
+                    logging.debug(f"CACHE HIT: {clean_purl} -> {','.join(licenses)} (from cache)")
                     enriched += 1
                 else:
+                    pkg["licenseConcluded"] = "UNKNOWN"
                     logging.warning(f"CACHE HIT BUT NO LICENSE: {clean_purl} -> UNKNOWN (cached but no license data)")
                     skipped += 1
                     if clean_purl not in skipped_packages["not_found"]:
