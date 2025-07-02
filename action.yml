@@ -103,10 +103,6 @@ runs:
           exit 1
         fi
         echo "SBOM file successfully downloaded."
-        echo "--- SBOM HEAD ---"
-        head -20 sbom.json
-        echo "--- SBOM TAIL ---"
-        tail -20 sbom.json
         echo "--- SBOM Entry Count (packages/components) ---"
         python3 -c "import json; d=json.load(open('sbom.json')); print('packages:', len(d.get('packages', []))); print('components:', len(d.get('components', [])))"
 
