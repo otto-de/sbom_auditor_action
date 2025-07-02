@@ -263,7 +263,11 @@ def _generate_github_summary(github_token, prompt, model_name=None):
             raise ValueError("GitHub Models API returned empty summary")
         
         logging.info("Successfully generated AI summary using GitHub Models")
-        return f"\n### AI-Assisted Summary (GitHub Models)\n\n{summary}\n"
+        
+        # Clean up the summary formatting
+        clean_summary = _clean_markdown_formatting(summary)
+        
+        return f"\n## AI-Assisted Summary (GitHub Models)\n\n{clean_summary}\n"
         
     except requests.exceptions.Timeout:
         raise ValueError("GitHub Models API request timed out")
@@ -271,3 +275,28 @@ def _generate_github_summary(github_token, prompt, model_name=None):
         raise ValueError(f"GitHub Models API request failed: {str(e)}")
     except json.JSONDecodeError:
         raise ValueError("GitHub Models API returned invalid JSON response")
+
+
+def _clean_markdown_formatting(text):
+    """Clean up markdown formatting in AI-generated text."""
+    if not text:
+        return text
+    
+    lines = text.split('\n')
+    cleaned_lines = []
+    
+    for line in lines:
+        # Remove any ### headers and convert them to proper subheaders
+        if line.strip().startswith('### '):
+            # Convert ### to #### for proper nesting under our main header
+            cleaned_lines.append(line.replace('### ', '#### ', 1))
+        elif line.strip().startswith('## '):
+            # Convert ## to #### for proper nesting
+            cleaned_lines.append(line.replace('## ', '#### ', 1))
+        elif line.strip().startswith('# '):
+            # Convert # to #### for proper nesting
+            cleaned_lines.append(line.replace('# ', '#### ', 1))
+        else:
+            cleaned_lines.append(line)
+    
+    return '\n'.join(cleaned_lines)
