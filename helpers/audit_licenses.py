@@ -81,13 +81,14 @@ def audit_component(component, license_policies, package_policies, internal_depe
                 return [{"package": f"{component_name}@{component_version}", "purl": purl, "policy": "internal"}]
     
     logging.debug(f"Processing component: {component_name}@{component_version} ({purl})")
+    logging.debug(f"  License concluded: {license_concluded}")
 
     # 1. Check for a specific package policy override
     package_policy = find_package_policy(purl, package_policies)
     if package_policy:
         policy = package_policy.get('usagePolicy')
         reason = package_policy.get('reason', 'N/A')
-        logging.info(f"  Found package-specific policy for {purl} using '{package_policy.get('matcher', 'exact')}' matcher on '{package_policy.get('purl')}': '{policy}'. Reason: {reason}")
+        logging.info(f"  PACKAGE POLICY OVERRIDE: {purl} -> {policy} (reason: {reason})")
         return [{
             "package": f"{component_name}@{component_version}",
             "purl": purl,
@@ -143,17 +144,19 @@ def audit_component(component, license_policies, package_policies, internal_depe
         current_policy = "needs-review (not in policy)"
         if policy:
             current_policy = policy.get('usagePolicy')
-            logging.debug(f"    Found policy for {license_id}: {current_policy}")
+            logging.debug(f"    FOUND POLICY: {license_id} -> {current_policy}")
         else:
-            logging.warning(f"    No policy found for license '{license_id}' for package {component_name}@{component_version}. Marking for review.")
+            logging.warning(f"    NO POLICY: {license_id} -> needs-review (package: {component_name}@{component_version})")
 
         # Update most restrictive policy: deny > needs-review > allow
         if current_policy == 'deny':
             most_restrictive_policy = 'deny'
             final_license_id = license_id # This is the one causing denial
+            logging.debug(f"    DENY POLICY: {license_id} -> setting final policy to deny")
         elif 'needs-review' in str(current_policy) and most_restrictive_policy != 'deny':
             most_restrictive_policy = current_policy
             final_license_id = license_id # This one needs review
+            logging.debug(f"    REVIEW POLICY: {license_id} -> setting final policy to {current_policy}")
     
     # If after checking all licenses, none were found, it's an issue.
     if not found_licenses:
@@ -176,6 +179,8 @@ def audit_component(component, license_policies, package_policies, internal_depe
         "license": final_license_id,
         "policy": most_restrictive_policy
     }
+    
+    logging.info(f"  FINAL RESULT: {component_name}@{component_version} -> {final_license_id} -> {most_restrictive_policy}")
     
     return [result]
 

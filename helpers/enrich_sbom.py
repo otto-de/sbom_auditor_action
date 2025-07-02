@@ -79,9 +79,13 @@ def enrich_sbom_with_depsdev(input_sbom_path, output_sbom_path, cache_ttl_hours=
             if cached_data:
                 licenses = cached_data.get('licenses', [])
                 pkg["licenseConcluded"] = licenses[0] if licenses else "UNKNOWN"
+                
+                # Add detailed logging for cache hits
                 if licenses:
+                    logging.debug(f"CACHE HIT: {clean_purl} -> {licenses[0]} (from cache)")
                     enriched += 1
                 else:
+                    logging.warning(f"CACHE HIT BUT NO LICENSE: {clean_purl} -> UNKNOWN (cached but no license data)")
                     skipped += 1
                     if clean_purl not in skipped_packages["not_found"]:
                         skipped_packages["not_found"].append(clean_purl)
@@ -90,6 +94,7 @@ def enrich_sbom_with_depsdev(input_sbom_path, output_sbom_path, cache_ttl_hours=
             # Cache miss - fetch from API
             encoded_purl = quote(clean_purl, safe='')
             api_url = f"https://api.deps.dev/v3alpha/purl/{encoded_purl}"
+            logging.debug(f"CACHE MISS: {clean_purl} -> fetching from API")
             resp = requests.get(api_url)
             
             # A versioned PURL response has a "version" key. A package-level response has a "package" key.
@@ -97,6 +102,7 @@ def enrich_sbom_with_depsdev(input_sbom_path, output_sbom_path, cache_ttl_hours=
                 data = resp.json()
                 if "version" in data:
                     licenses = data.get("version", {}).get("licenses", [])
+                    logging.debug(f"API RESPONSE: {clean_purl} -> {licenses} (version endpoint)")
             
             # If we still have no licenses, trigger the fallback.
             if not licenses:
@@ -105,6 +111,7 @@ def enrich_sbom_with_depsdev(input_sbom_path, output_sbom_path, cache_ttl_hours=
                     purl_no_version = clean_purl.split('@')[0]
                     encoded_purl_no_version = quote(purl_no_version, safe='')
                     package_api_url = f"https://api.deps.dev/v3alpha/purl/{encoded_purl_no_version}"
+                    logging.debug(f"FALLBACK: {clean_purl} -> trying package endpoint {purl_no_version}")
                     package_resp = requests.get(package_api_url)
                 else:
                     # The first call was already for the package, so we can reuse the response.
@@ -127,6 +134,7 @@ def enrich_sbom_with_depsdev(input_sbom_path, output_sbom_path, cache_ttl_hours=
                             if versioned_resp.status_code == 200:
                                 versioned_data = versioned_resp.json()
                                 licenses = versioned_data.get("version", {}).get("licenses", [])
+                                logging.debug(f"LATEST VERSION: {clean_purl} -> {licenses} (latest: {versioned_purl})")
 
             # Cache the result
             cache_data = {
@@ -135,11 +143,14 @@ def enrich_sbom_with_depsdev(input_sbom_path, output_sbom_path, cache_ttl_hours=
                 'api_calls': 1 if resp.status_code == 200 else 0
             }
             cache_manager.cache_package_info(clean_purl, cache_data)
+            logging.debug(f"CACHED: {clean_purl} -> {licenses}")
 
             if licenses:
                 pkg["licenseConcluded"] = ",".join(licenses)
+                logging.info(f"ENRICHED: {clean_purl} -> {','.join(licenses)}")
                 enriched += 1
             else:
+                logging.warning(f"NO LICENSE FOUND: {clean_purl} -> UNKNOWN")
                 skipped += 1
                 if purl not in skipped_packages["not_found"]:
                     skipped_packages["not_found"].append(purl)
@@ -178,9 +189,11 @@ if __name__ == "__main__":
     parser.add_argument("output", help="Output enriched SPDX JSON file")
     parser.add_argument("--cache-ttl-hours", type=int, default=168, 
                         help="Cache TTL in hours (default: 168 = 7 days)")
+    parser.add_argument("--debug", action="store_true", help="Enable debug logging")
     args = parser.parse_args()
 
     # Configure logging
-    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+    log_level = logging.DEBUG if args.debug else logging.INFO
+    logging.basicConfig(level=log_level, format='%(asctime)s - %(levelname)s - %(message)s')
 
     enrich_sbom_with_depsdev(args.input, args.output, args.cache_ttl_hours)
