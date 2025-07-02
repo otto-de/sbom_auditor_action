@@ -1,0 +1,37 @@
+{
+  "packages": [
+    {
+      "name": "react",
+      "versionInfo": "17.0.2",
+      "licenseConcluded": "MIT",
+      "externalRefs": [
+        {
+          "referenceType": "purl",
+          "referenceLocator": "pkg:npm/react@17.0.2"
+        }
+      ]
+    },
+    {
+      "name": "log4j-core",
+      "versionInfo": "2.17.1",
+      "licenseConcluded": "Apache-2.0",
+      "externalRefs": [
+        {
+          "referenceType": "purl",
+          "referenceLocator": "pkg:maven/org.apache.logging.log4j/log4j-core@2.17.1?type=jar"
+        }
+      ]
+    },
+    {
+      "name": "some-other-lib",
+      "versionInfo": "1.0.0",
+      "licenseConcluded": "GPL-3.0-only",
+      "externalRefs": [
+        {
+          "referenceType": "purl",
+          "referenceLocator": "pkg:gem/some-other-lib@1.0.0"
+        }
+      ]
+    }
+  ]
+}

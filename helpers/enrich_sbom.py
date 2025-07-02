@@ -5,11 +5,18 @@
 import json
 import requests
 import argparse
+import logging
 from tqdm import tqdm
 import urllib.parse
 from urllib.parse import quote
+from cache_manager import SBOMCacheManager
 
-def enrich_sbom_with_depsdev(input_sbom_path, output_sbom_path):
+def enrich_sbom_with_depsdev(input_sbom_path, output_sbom_path, cache_ttl_hours=168):
+    # Initialize cache manager
+    cache_manager = SBOMCacheManager(cache_ttl_hours=cache_ttl_hours)
+    cache_stats = cache_manager.get_cache_stats()
+    logging.info(f"Cache initialized: {cache_stats['valid_entries']} valid entries, {cache_stats['expired_entries']} expired")
+    
     with open(input_sbom_path, 'r') as f:
         sbom = json.load(f)
 
@@ -65,7 +72,20 @@ def enrich_sbom_with_depsdev(input_sbom_path, output_sbom_path):
             if '@' not in clean_purl and pkg.get('versionInfo'):
                 clean_purl = f"{clean_purl}@{pkg['versionInfo']}"
 
-            # Initial attempt with the (possibly now) versioned purl
+            # Check cache first
+            cached_data = cache_manager.get_cached_package_info(clean_purl)
+            if cached_data:
+                licenses = cached_data.get('licenses', [])
+                pkg["licenseConcluded"] = licenses[0] if licenses else "UNKNOWN"
+                if licenses:
+                    enriched += 1
+                else:
+                    skipped += 1
+                    if clean_purl not in skipped_packages["not_found"]:
+                        skipped_packages["not_found"].append(clean_purl)
+                continue
+
+            # Cache miss - fetch from API
             encoded_purl = quote(clean_purl, safe='')
             api_url = f"https://api.deps.dev/v3alpha/purl/{encoded_purl}"
             resp = requests.get(api_url)
@@ -106,6 +126,14 @@ def enrich_sbom_with_depsdev(input_sbom_path, output_sbom_path):
                                 versioned_data = versioned_resp.json()
                                 licenses = versioned_data.get("version", {}).get("licenses", [])
 
+            # Cache the result
+            cache_data = {
+                'licenses': licenses,
+                'fetched_from': 'deps.dev',
+                'api_calls': 1 if resp.status_code == 200 else 0
+            }
+            cache_manager.cache_package_info(clean_purl, cache_data)
+
             if licenses:
                 pkg["licenseConcluded"] = ",".join(licenses)
                 enriched += 1
@@ -116,10 +144,16 @@ def enrich_sbom_with_depsdev(input_sbom_path, output_sbom_path):
 
         except Exception as e:
             skipped += 1
+            logging.warning(f"Exception processing {purl}: {e}")
             if purl not in skipped_packages["exception"]:
                 skipped_packages["exception"].append(purl)
 
+    # Cleanup expired cache entries
+    cleaned_entries = cache_manager.cleanup_expired_cache()
+    final_cache_stats = cache_manager.get_cache_stats()
+    
     print(f"✅ Enriched {enriched} packages. Skipped {skipped}.")
+    print(f"📦 Cache: {final_cache_stats['valid_entries']} entries, cleaned {cleaned_entries} expired")
 
     print("\n--- Skipped Packages Summary ---")
     for reason, pkgs in skipped_packages.items():
@@ -140,6 +174,11 @@ if __name__ == "__main__":
     )
     parser.add_argument("input", help="Input SPDX SBOM JSON file")
     parser.add_argument("output", help="Output enriched SPDX JSON file")
+    parser.add_argument("--cache-ttl-hours", type=int, default=168, 
+                        help="Cache TTL in hours (default: 168 = 7 days)")
     args = parser.parse_args()
 
-    enrich_sbom_with_depsdev(args.input, args.output)
+    # Configure logging
+    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
+    enrich_sbom_with_depsdev(args.input, args.output, args.cache_ttl_hours)

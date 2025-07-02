@@ -40,6 +40,14 @@ inputs:
     description: 'A newline-separated list of regex patterns to identify internal dependencies that should be skipped from the audit.'
     required: false
     default: 'de.otto.*'
+  enable_cache:
+    description: 'Enable caching for SBOM enrichment to speed up subsequent runs.'
+    required: false
+    default: 'true'
+  cache_ttl_hours:
+    description: 'Cache time-to-live in hours for package data (default: 168 = 7 days).'
+    required: false
+    default: '168'
 
 outputs:
   audit_exit_code:
@@ -62,6 +70,16 @@ runs:
       uses: actions/setup-python@v4
       with:
         python-version: '3.x'
+
+    - name: Cache setup for SBOM enrichment
+      if: inputs.enable_cache == 'true'
+      uses: actions/cache@v4
+      with:
+        path: ./sbom_cache
+        key: sbom-cache-${{ github.repository_owner }}-${{ hashFiles('**/requirements.txt', '**/package.json', '**/pom.xml', '**/Cargo.toml', '**/go.mod') }}-${{ inputs.cache_ttl_hours }}
+        restore-keys: |
+          sbom-cache-${{ github.repository_owner }}-
+          sbom-cache-
 
     - name: Install Python dependencies
       shell: bash
@@ -94,7 +112,12 @@ runs:
 
     - name: Enrich SBOM
       shell: bash
-      run: python ${{ github.action_path }}/helpers/enrich_sbom.py sbom.json sbom_enriched.json
+      run: |
+        if [ "${{ inputs.enable_cache }}" = "true" ]; then
+          python ${{ github.action_path }}/helpers/enrich_sbom.py sbom.json sbom_enriched.json --cache-ttl-hours ${{ inputs.cache_ttl_hours }}
+        else
+          python ${{ github.action_path }}/helpers/enrich_sbom.py sbom.json sbom_enriched.json --cache-ttl-hours 0
+        fi
       env:
         OPENAI_API_KEY: ${{ inputs.openai_api_key }}
 
