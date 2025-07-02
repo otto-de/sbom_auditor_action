@@ -107,11 +107,21 @@ def _generate_azure_summary(api_key, azure_endpoint, azure_deployment, prompt, m
     if not azure_endpoint or not azure_deployment:
         raise ValueError("Azure OpenAI requires both endpoint and deployment parameters")
     
-    client = OpenAI(
-        api_key=api_key,
-        api_version="2024-02-01",
-        azure_endpoint=azure_endpoint
-    )
+    try:
+        # Try the newer Azure OpenAI client initialization
+        from openai import AzureOpenAI
+        client = AzureOpenAI(
+            api_key=api_key,
+            api_version="2024-12-01-preview",  # Updated for o4-mini support
+            azure_endpoint=azure_endpoint
+        )
+    except ImportError:
+        # Fallback to older method if AzureOpenAI is not available
+        client = OpenAI(
+            api_key=api_key,
+            base_url=f"{azure_endpoint.rstrip('/')}/openai/deployments/{azure_deployment}",
+            default_headers={"api-key": api_key}
+        )
     
     response = client.chat.completions.create(
         model=azure_deployment,  # In Azure, this is the deployment name
