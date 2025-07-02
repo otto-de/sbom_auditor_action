@@ -25,7 +25,7 @@ To use this action in your workflow, add the following step:
     # openai_api_key: ${{ secrets.OPENAI_API_KEY }}
 
     # (Optional) AI provider to use for summary generation.
-    # ai_provider: 'openai'  # Options: openai, azure, bedrock
+    # ai_provider: 'openai'  # Options: openai, azure, bedrock, github
 
     # (Optional) Azure OpenAI specific configuration
     # azure_endpoint: ${{ secrets.AZURE_OPENAI_ENDPOINT }}
@@ -56,14 +56,18 @@ To use this action in your workflow, add the following step:
 | `github_token`        | GitHub token to access the dependency graph API.                                                             | `true`   | `${{ github.token }}`                                  |
 | `fail_hard`           | If `true`, the action will fail if license violations are found.                                             | `false`  | `'false'`                                                |
 | `openai_api_key`      | API key for AI-assisted summary generation. Use with `ai_provider` input to specify the provider.          | `false`  | `''`                                                     |
-| `ai_provider`         | AI provider to use for summary generation. Options: `openai`, `azure`, `bedrock`.                          | `false`  | `'openai'`                                               |
-| `azure_endpoint`      | Azure OpenAI endpoint URL (required when `ai_provider` is `azure`).                                        | `false`  | `''`                                                     |
-| `azure_deployment`    | Azure OpenAI deployment name (required when `ai_provider` is `azure`).                                     | `false`  | `''`                                                     |
-| `aws_region`          | AWS region for Bedrock (required when `ai_provider` is `bedrock`).                                         | `false`  | `''`                                                     |
+| `ai_provider`         | AI provider to use for summary generation. Options: `openai`, `azure`, `bedrock`, `github`.               | `false`  | `'openai'`                                               |
+| `azure_endpoint`      | Azure OpenAI endpoint URL (required when `ai_provider` is `azure`).                                        | `false`* | `''`                                                     |
+| `azure_deployment`    | Azure OpenAI deployment name (required when `ai_provider` is `azure`).                                     | `false`* | `''`                                                     |
+| `aws_region`          | AWS region for Bedrock (required when `ai_provider` is `bedrock`).                                         | `false`* | `''`                                                     |
 | `ai_model_name`       | Specific AI model name to use (optional, provider-specific defaults will be used).                         | `false`  | `''`                                                     |
 | `package_policy_path` | Path to an optional package policy JSON file. If not provided, the action looks for a file named `package_policy.json` in the `helpers` directory of the action itself. | `false`  | `''`                                                     |
 | `policy_path`         | Path to an optional license policy JSON file. If not provided, the action uses the `policy.json` file included with the action. | `false`  | `''`                                                     |
 | `internal_dependency_pattern` | A newline-separated list of regex patterns to identify internal dependencies that should be skipped from the audit. | `false`  | `'de.otto.*'`                                            |
+
+**Note:** Parameters marked with `*` are conditionally required based on the selected `ai_provider`:
+- `azure_endpoint` and `azure_deployment` are required when `ai_provider` is `'azure'`
+- `aws_region` is required when `ai_provider` is `'bedrock'`
 
 ## Outputs
 
@@ -144,6 +148,26 @@ The action supports multiple AI providers for generating intelligent license com
 ```
 
 **Note for AWS Bedrock:** You can either provide the AWS access key via the `openai_api_key` input (in which case you must also set `AWS_SECRET_ACCESS_KEY` as an environment variable), or use environment variables for AWS credentials, or rely on IAM roles if running on AWS infrastructure.
+
+### GitHub Models (Beta)
+
+```yaml
+- name: SBOM Audit with GitHub Models
+  uses: otto-de/sbom_auditor_action@v1
+  with:
+    github_token: ${{ secrets.GITHUB_TOKEN }}
+    ai_provider: 'github'
+    ai_model_name: 'openai/gpt-4o'  # Optional: defaults to openai/gpt-4o
+  # Note: Requires models: read permission in workflow
+```
+
+**Note for GitHub Models:** This provider uses the GitHub Models API (in beta) and requires the `models: read` permission in your workflow. Add this to your workflow file:
+
+```yaml
+permissions:
+  models: read
+  contents: read  # Required for SBOM access
+```
 
 ## Example Workflow
 

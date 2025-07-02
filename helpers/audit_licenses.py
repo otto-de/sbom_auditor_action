@@ -361,7 +361,7 @@ if __name__ == '__main__':
     parser.add_argument('policy_path', help='Path to the policy JSON file.')
     parser.add_argument('--package-policy-path', help='Path to the optional package policy JSON file.')
     parser.add_argument('--openai-api-key', help='Optional OpenAI API key for generating an AI-assisted summary.')
-    parser.add_argument('--ai-provider', default='openai', choices=['openai', 'azure', 'bedrock'], help='AI provider to use for summary generation.')
+    parser.add_argument('--ai-provider', default='openai', choices=['openai', 'azure', 'bedrock', 'github'], help='AI provider to use for summary generation.')
     parser.add_argument('--azure-endpoint', help='Azure OpenAI endpoint URL (required for azure provider).')
     parser.add_argument('--azure-deployment', help='Azure OpenAI deployment name (required for azure provider).')
     parser.add_argument('--aws-region', help='AWS region for Bedrock (required for bedrock provider).')

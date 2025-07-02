@@ -15,7 +15,7 @@ inputs:
     description: 'API key for AI-assisted summary generation. Use with ai_provider input to specify the provider.'
     required: false
   ai_provider:
-    description: 'AI provider to use for summary generation. Options: openai, azure, bedrock.'
+    description: 'AI provider to use for summary generation. Options: openai, azure, bedrock, github.'
     required: false
     default: 'openai'
   azure_endpoint:

@@ -6,16 +6,17 @@ from openai import OpenAI
 import logging
 import json
 import os
+import requests
 
 def generate_summary(api_key, denied_list, needs_review_list, provider="openai", azure_endpoint=None, azure_deployment=None, aws_region=None, model_name=None):
     """
     Generates an AI-powered summary of the license audit report using various AI providers.
     
     Args:
-        api_key: API key for the selected provider
+        api_key: API key for the selected provider (for GitHub Models, use GitHub token)
         denied_list: List of denied packages
         needs_review_list: List of packages needing review
-        provider: AI provider to use ("openai", "azure", "bedrock")
+        provider: AI provider to use ("openai", "azure", "bedrock", "github")
         azure_endpoint: Azure OpenAI endpoint URL (required for azure provider)
         azure_deployment: Azure OpenAI deployment name (required for azure provider)
         aws_region: AWS region for Bedrock (required for bedrock provider)
@@ -36,6 +37,8 @@ def generate_summary(api_key, denied_list, needs_review_list, provider="openai",
             return _generate_azure_summary(api_key, azure_endpoint, azure_deployment, prompt, model_name)
         elif provider.lower() == "bedrock":
             return _generate_bedrock_summary(api_key, aws_region, prompt, model_name)
+        elif provider.lower() == "github":
+            return _generate_github_summary(api_key, prompt, model_name)
         else:
             logging.error(f"Unsupported AI provider: {provider}")
             return f"\n### AI-Assisted Summary\n\nError: Unsupported AI provider '{provider}'.\n"
@@ -207,3 +210,33 @@ def _generate_bedrock_summary(api_key, aws_region, prompt, model_name=None):
         summary = response_body.get('text', response_body.get('generated_text', str(response_body)))
     
     return f"\n### AI-Assisted Summary (AWS Bedrock)\n\n{summary}\n"
+
+
+def _generate_github_summary(github_token, prompt, model_name=None):
+    """Generate summary using GitHub Models API."""
+    if not github_token:
+        raise ValueError("GitHub Models requires a GitHub token")
+    
+    # Default to GPT-4o if no model specified
+    model = model_name or "openai/gpt-4o"
+    
+    url = "https://models.github.ai/inference/chat/completions"
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {github_token}"
+    }
+    
+    data = {
+        "messages": [
+            {"role": "system", "content": "You are a license compliance expert."},
+            {"role": "user", "content": prompt}
+        ],
+        "model": model
+    }
+    
+    response = requests.post(url, headers=headers, json=data, timeout=60)
+    response.raise_for_status()
+    
+    response_data = response.json()
+    summary = response_data['choices'][0]['message']['content']
+    return f"\n### AI-Assisted Summary (GitHub Models)\n\n{summary}\n"

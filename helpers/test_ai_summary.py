@@ -69,5 +69,30 @@ class TestAISummary(unittest.TestCase):
         summary = generate_summary('fake_api_key', [], [], provider='unsupported')
         self.assertIn("Error: Unsupported AI provider 'unsupported'", summary)
 
+    @patch('helpers.ai_summary.requests.post')
+    def test_generate_summary_github_success(self, mock_post):
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            'choices': [{'message': {'content': 'Test GitHub Models summary'}}]
+        }
+        mock_response.raise_for_status.return_value = None
+        mock_post.return_value = mock_response
+
+        denied_list = [{'package': 'test-denied', 'license': 'GPL-2.0', 'policy': 'deny'}]
+        needs_review_list = []
+        
+        summary = generate_summary('fake_github_token', denied_list, needs_review_list, 
+                                 provider='github')
+        self.assertEqual(summary, '\n### AI-Assisted Summary (GitHub Models)\n\nTest GitHub Models summary\n')
+        mock_post.assert_called_once()
+
+    def test_generate_summary_github_no_token(self):
+        """Test that github provider fails gracefully when no token is provided"""
+        denied_list = []
+        needs_review_list = [{'package': 'test-review', 'license': 'LGPL-2.1', 'policy': 'needs-review'}]
+        
+        summary = generate_summary(None, denied_list, needs_review_list, provider='github')
+        self.assertEqual(summary, "")
+
 if __name__ == '__main__':
     unittest.main()

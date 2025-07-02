@@ -5,8 +5,14 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- **GitHub Models Support**: Added experimental support for GitHub Models as a fourth AI provider
+  - Added `github` option to `ai_provider` input for using GitHub's AI models
+  - Uses GitHub token for authentication (no additional API keys needed)
+  - Supports all models available in GitHub Models (GPT-4o, Claude, Llama, etc.)
+  - Requires `models: read` permission in GitHub Actions workflows
+  - Enhanced test coverage for GitHub Models integration
 - **Multi-Provider AI Support**: Expanded AI-assisted summary to support OpenAI, Azure OpenAI, and AWS Bedrock
-  - Added `ai_provider` input to select between providers (openai, azure, bedrock)
+  - Added `ai_provider` input to select between providers (openai, azure, bedrock, github)
   - Added `azure_endpoint` and `azure_deployment` inputs for Azure OpenAI configuration
   - Added `aws_region` input for AWS Bedrock configuration
   - Added `ai_model_name` input to specify custom models for each provider
@@ -16,7 +22,7 @@ All notable changes to this project will be documented in this file.
 
 ### Changed
 - Renamed `openai_api_key` input description to be provider-agnostic
-- Updated README.md with comprehensive examples for all three AI providers
+- Updated README.md with comprehensive examples for all four AI providers
 - Enhanced test coverage for multi-provider functionality
 
 ## [1.0.0] - 2025-06-30
