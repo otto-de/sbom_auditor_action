@@ -210,8 +210,32 @@ def generate_summary_table(total_packages, internal_packages, gh_actions_count, 
 def generate_report(denied, needs_review, allowed, internal, debug, markdown, openai_api_key=None, ai_provider="openai", azure_endpoint=None, azure_deployment=None, aws_region=None, ai_model_name=None):
     """Generates and prints the license audit report."""
     report = ""
-    if openai_api_key:
-        report += generate_summary(openai_api_key, denied, needs_review, ai_provider, azure_endpoint, azure_deployment, aws_region, ai_model_name)
+    
+    # Determine if AI summary should be generated based on provider and available credentials
+    should_generate_ai_summary = False
+    api_key_for_ai = None
+    
+    if ai_provider.lower() == "github":
+        # For GitHub Models, use GITHUB_TOKEN from environment or the provided openai_api_key
+        github_token = os.getenv('GITHUB_TOKEN') or openai_api_key
+        if github_token:
+            should_generate_ai_summary = True
+            api_key_for_ai = github_token
+    elif openai_api_key:
+        # For other providers (OpenAI, Azure, Bedrock), use the provided API key
+        should_generate_ai_summary = True
+        api_key_for_ai = openai_api_key
+    
+    if should_generate_ai_summary:
+        try:
+            ai_summary = generate_summary(api_key_for_ai, denied, needs_review, ai_provider, azure_endpoint, azure_deployment, aws_region, ai_model_name)
+            if ai_summary and ai_summary.strip():
+                report += ai_summary
+            else:
+                logging.warning(f"AI summary generation returned empty result for provider: {ai_provider}")
+        except Exception as e:
+            logging.error(f"Failed to generate AI summary with {ai_provider}: {e}")
+            report += f"\n### AI-Assisted Summary\n\nError: Could not generate AI summary using {ai_provider}. {str(e)}\n"
 
     if markdown:
         report += "## License Audit Report\n\n"

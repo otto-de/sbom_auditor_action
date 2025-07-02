@@ -220,6 +220,8 @@ def _generate_github_summary(github_token, prompt, model_name=None):
     # Default to GPT-4o mini if no model specified (best price/performance)
     model = model_name or "openai/gpt-4o-mini"
     
+    logging.info(f"Using GitHub Models API with model: {model}")
+    
     url = "https://models.github.ai/inference/chat/completions"
     headers = {
         "Content-Type": "application/json",
@@ -234,9 +236,38 @@ def _generate_github_summary(github_token, prompt, model_name=None):
         "model": model
     }
     
-    response = requests.post(url, headers=headers, json=data, timeout=60)
-    response.raise_for_status()
-    
-    response_data = response.json()
-    summary = response_data['choices'][0]['message']['content']
-    return f"\n### AI-Assisted Summary (GitHub Models)\n\n{summary}\n"
+    try:
+        response = requests.post(url, headers=headers, json=data, timeout=60)
+        
+        # Log response details for debugging
+        logging.debug(f"GitHub Models API response status: {response.status_code}")
+        
+        if response.status_code == 401:
+            raise ValueError("GitHub Models API authentication failed. Please check your GitHub token has 'models: read' permission.")
+        elif response.status_code == 403:
+            raise ValueError("GitHub Models API access forbidden. Ensure your token has 'models: read' permission and GitHub Models is enabled for your organization.")
+        elif response.status_code == 404:
+            raise ValueError(f"GitHub Models API model not found: {model}. Please check the model name.")
+        elif response.status_code != 200:
+            error_text = response.text if response.text else "Unknown error"
+            raise ValueError(f"GitHub Models API error {response.status_code}: {error_text}")
+        
+        response_data = response.json()
+        
+        if 'choices' not in response_data or not response_data['choices']:
+            raise ValueError("GitHub Models API returned no choices in response")
+        
+        summary = response_data['choices'][0]['message']['content']
+        
+        if not summary or not summary.strip():
+            raise ValueError("GitHub Models API returned empty summary")
+        
+        logging.info("Successfully generated AI summary using GitHub Models")
+        return f"\n### AI-Assisted Summary (GitHub Models)\n\n{summary}\n"
+        
+    except requests.exceptions.Timeout:
+        raise ValueError("GitHub Models API request timed out")
+    except requests.exceptions.RequestException as e:
+        raise ValueError(f"GitHub Models API request failed: {str(e)}")
+    except json.JSONDecodeError:
+        raise ValueError("GitHub Models API returned invalid JSON response")
