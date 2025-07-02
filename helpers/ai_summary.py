@@ -217,8 +217,8 @@ def _generate_github_summary(github_token, prompt, model_name=None):
     if not github_token:
         raise ValueError("GitHub Models requires a GitHub token")
     
-    # Default to GPT-4o if no model specified
-    model = model_name or "openai/gpt-4o"
+    # Default to GPT-4o mini if no model specified (best price/performance)
+    model = model_name or "openai/gpt-4o-mini"
     
     url = "https://models.github.ai/inference/chat/completions"
     headers = {

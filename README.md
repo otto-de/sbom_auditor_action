@@ -157,7 +157,7 @@ The action supports multiple AI providers for generating intelligent license com
   with:
     github_token: ${{ secrets.GITHUB_TOKEN }}
     ai_provider: 'github'
-    ai_model_name: 'openai/gpt-4o'  # Optional: defaults to openai/gpt-4o
+    ai_model_name: 'openai/gpt-4o-mini'  # Optional: defaults to openai/gpt-4o-mini
   # Note: Requires models: read permission in workflow
 ```
 
