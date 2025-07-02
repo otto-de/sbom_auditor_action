@@ -1,0 +1,56 @@
+# Logs
+*.log
+logs/
+debug_*.sh
+
+# Test files and artifacts
+test_*.json
+sbom.json
+sbom_enriched.json
+license-audit-report.md
+LICENSES.md
+
+# Cache directories
+sbom_cache/
+__pycache__/
+.cache/
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+
+# Python
+*.pyc
+*.pyo
+*.pyd
+__pycache__/
+*.so
+.Python
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Node.js (if any)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
