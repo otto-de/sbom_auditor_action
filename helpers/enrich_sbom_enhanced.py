@@ -13,6 +13,7 @@ import argparse
 import logging
 import os
 import sys
+import xml.etree.ElementTree as ET
 from tqdm import tqdm
 import urllib.parse
 from urllib.parse import quote
@@ -21,6 +22,113 @@ from license_resolver import LicenseResolver
 
 # Add current directory to path for imports
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+
+
+def get_maven_license_from_pom(package_name, version=None):
+    """
+    Try to get the real license from a Maven package's POM file.
+    
+    Args:
+        package_name: Maven package name (e.g., 'org.junit.platform:junit-platform-commons')
+        version: Package version (optional, will use latest if not provided)
+        
+    Returns:
+        License name from POM or None if not found
+    """
+    try:
+        # Convert package name to path format
+        group_id, artifact_id = package_name.split(':')
+        group_path = group_id.replace('.', '/')
+        
+        # If no version provided, we need to find the latest
+        if not version:
+            # Get the latest version from Maven Central metadata
+            metadata_url = f"https://repo1.maven.org/maven2/{group_path}/{artifact_id}/maven-metadata.xml"
+            metadata_resp = requests.get(metadata_url, timeout=10)
+            
+            if metadata_resp.status_code == 200:
+                try:
+                    root = ET.fromstring(metadata_resp.text)
+                    latest_elem = root.find('.//latest')
+                    if latest_elem is not None:
+                        version = latest_elem.text
+                    else:
+                        # Fallback to last version in versions list
+                        versions_elem = root.find('.//versions')
+                        if versions_elem is not None:
+                            version_elems = versions_elem.findall('version')
+                            if version_elems:
+                                version = version_elems[-1].text
+                except ET.ParseError:
+                    logging.warning(f"Could not parse metadata XML for {package_name}")
+                    return None
+            else:
+                logging.warning(f"Could not fetch metadata for {package_name}")
+                return None
+        
+        if not version:
+            return None
+        
+        # Download the POM file
+        pom_url = f"https://repo1.maven.org/maven2/{group_path}/{artifact_id}/{version}/{artifact_id}-{version}.pom"
+        pom_resp = requests.get(pom_url, timeout=10)
+        
+        if pom_resp.status_code == 200:
+            try:
+                root = ET.fromstring(pom_resp.text)
+                
+                # Look for license information in the POM
+                # Handle XML namespaces - Maven POM might have default namespace
+                namespaces = {'m': 'http://maven.apache.org/POM/4.0.0'} if 'xmlns' in pom_resp.text else {}
+                
+                # Try with namespace first, then without
+                license_paths = [
+                    './/m:licenses/m:license/m:name',  # With namespace
+                    './/licenses/license/name'        # Without namespace
+                ]
+                
+                for path in license_paths:
+                    if namespaces:
+                        license_elem = root.find(path, namespaces)
+                    else:
+                        license_elem = root.find(path)
+                        
+                    if license_elem is not None and license_elem.text:
+                        license_name = license_elem.text.strip()
+                        logging.debug(f"Found license in POM for {package_name}:{version}: {license_name}")
+                        return license_name
+                
+                # If no license found in direct elements, check parent POM
+                parent_elem = root.find('.//parent') if not namespaces else root.find('.//m:parent', namespaces)
+                if parent_elem is not None:
+                    parent_group_id = None
+                    parent_artifact_id = None
+                    parent_version = None
+                    
+                    for child in parent_elem:
+                        tag = child.tag.split('}')[-1] if '}' in child.tag else child.tag  # Remove namespace
+                        if tag == 'groupId':
+                            parent_group_id = child.text
+                        elif tag == 'artifactId':
+                            parent_artifact_id = child.text
+                        elif tag == 'version':
+                            parent_version = child.text
+                    
+                    if parent_group_id and parent_artifact_id and parent_version:
+                        parent_package = f"{parent_group_id}:{parent_artifact_id}"
+                        logging.debug(f"Checking parent POM: {parent_package}:{parent_version}")
+                        return get_maven_license_from_pom(parent_package, parent_version)
+                
+            except ET.ParseError as e:
+                logging.warning(f"Could not parse POM XML for {package_name}:{version}: {e}")
+                return None
+        else:
+            logging.debug(f"Could not fetch POM for {package_name}:{version} (status: {pom_resp.status_code})")
+            return None
+            
+    except Exception as e:
+        logging.debug(f"Error getting license from POM for {package_name}: {e}")
+        return None
 
 
 def enrich_sbom_with_intelligent_resolution(input_sbom_path, output_sbom_path, cache_ttl_hours=168, resolve_licenses=True):
@@ -84,8 +192,6 @@ def enrich_sbom_with_intelligent_resolution(input_sbom_path, output_sbom_path, c
         # Parse package URL for deps.dev query
         try:
             parsed_purl = urllib.parse.urlparse(purl)
-            path_parts = parsed_purl.path.split('/')
-            ecosystem = path_parts[0] if path_parts else ''
             
             # Skip internal and GitHub Actions packages
             if 'github.com' in purl and 'github.com/actions' not in purl:
@@ -100,39 +206,125 @@ def enrich_sbom_with_intelligent_resolution(input_sbom_path, output_sbom_path, c
                     skipped_packages["github_actions"].append(purl)
                 continue
 
-            # Clean purl for deps.dev (remove version constraints)
-            clean_purl = purl.split('@')[0] if '@' in purl else purl
+            # Parse PURL components
+            purl_parts = purl.split('/')
+            if len(purl_parts) < 2:
+                continue
+                
+            ecosystem = purl_parts[0].replace('pkg:', '')
+            
+            # Handle Maven packages specially (use : format for deps.dev)
+            if ecosystem == 'maven':
+                if len(purl_parts) < 3:
+                    continue
+                namespace = purl_parts[1] 
+                name_version = purl_parts[2]
+                name = name_version.split('@')[0]
+                package_name = f"{namespace}:{name}"
+                
+                # Get version if specified
+                version = None
+                if '@' in name_version:
+                    version = name_version.split('@')[1]
+            else:
+                # Other ecosystems 
+                if len(purl_parts) >= 3:
+                    package_name = f"{purl_parts[1]}/{purl_parts[2].split('@')[0]}"
+                else:
+                    package_name = purl_parts[1].split('@')[0]
+                
+                version = None
+                if '@' in purl_parts[-1]:
+                    version = purl_parts[-1].split('@')[1]
             
             # Check cache first
-            cache_key = f"depsdev:{clean_purl}"
-            cached_result = cache_manager.get_cached_result(cache_key)
+            cache_key = f"depsdev:{ecosystem}:{package_name}"
+            if version:
+                cache_key += f":{version}"
+                
+            cached_result = cache_manager.get_cached_package_info(cache_key)
             
             if cached_result:
                 license_data = cached_result.get('license_data')
-                logging.debug(f"CACHE HIT: {clean_purl}")
+                logging.debug(f"CACHE HIT: {package_name}")
             else:
-                # Query deps.dev API
-                encoded_purl = quote(clean_purl, safe='')
-                url = f"https://api.deps.dev/v3/systems/{ecosystem}/packages/{quote(path_parts[-1], safe='')}"
+                # Query deps.dev API with correct format
+                encoded_package = quote(package_name, safe='')
+                
+                if version:
+                    # Get specific version
+                    url = f"https://api.deps.dev/v3alpha/systems/{ecosystem}/packages/{encoded_package}/versions/{version}"
+                else:
+                    # Get package info (latest versions)  
+                    url = f"https://api.deps.dev/v3alpha/systems/{ecosystem}/packages/{encoded_package}"
                 
                 response = requests.get(url, timeout=10)
                 license_data = None
                 
                 if response.status_code == 200:
                     data = response.json()
-                    versions = data.get('versions', [])
                     
-                    if versions:
-                        # Get the latest version's license info
-                        latest_version = versions[0]
-                        license_data = latest_version.get('licenses', [])
+                    if version:
+                        # Direct version response
+                        license_data = data.get('licenses', [])
                         
-                        # Cache the result
-                        cache_manager.cache_result(cache_key, {
-                            'license_data': license_data,
-                            'source': 'deps.dev'
-                        })
-                        logging.debug(f"API CALL: {clean_purl} -> {response.status_code}")
+                        # Check for detailed license information
+                        license_details = data.get('licenseDetails', [])
+                        if license_details:
+                            # Use detailed license information if available
+                            detailed_licenses = []
+                            for detail in license_details:
+                                license_name = detail.get('license')
+                                if license_name:
+                                    detailed_licenses.append(license_name)
+                                    logging.debug(f"Found detailed license: {license_name} (SPDX: {detail.get('spdx')})")
+                            
+                            if detailed_licenses:
+                                license_data = detailed_licenses
+                                logging.info(f"🔍 Using detailed license info from deps.dev for {package_name}: {detailed_licenses}")
+                    else:
+                        # Package response - get from latest version
+                        versions = data.get('versions', [])
+                        if versions:
+                            # Try to get license from the first (usually latest) version
+                            latest_version_info = versions[0]
+                            version_to_fetch = latest_version_info.get('versionKey', {}).get('version')
+                            
+                            if version_to_fetch:
+                                version_url = f"https://api.deps.dev/v3alpha/systems/{ecosystem}/packages/{encoded_package}/versions/{version_to_fetch}"
+                                version_response = requests.get(version_url, timeout=10)
+                                
+                                if version_response.status_code == 200:
+                                    version_data = version_response.json()
+                                    license_data = version_data.get('licenses', [])
+                                    
+                                    # Check for detailed license information
+                                    license_details = version_data.get('licenseDetails', [])
+                                    if license_details:
+                                        detailed_licenses = []
+                                        for detail in license_details:
+                                            license_name = detail.get('license')
+                                            if license_name:
+                                                detailed_licenses.append(license_name)
+                                                logging.debug(f"Found detailed license: {license_name}")
+                                        
+                                        if detailed_licenses:
+                                            license_data = detailed_licenses
+                                            logging.info(f"🔍 Using detailed license info from deps.dev for {package_name}: {detailed_licenses}")
+                    
+                    # Cache the result
+                    cache_manager.cache_package_info(cache_key, {
+                        'license_data': license_data,
+                        'source': 'deps.dev'
+                    })
+                    logging.debug(f"API CALL: {package_name} -> {response.status_code}")
+                else:
+                    logging.debug(f"API ERROR: {package_name} -> {response.status_code}")
+                    # Cache empty result to avoid repeated failures
+                    cache_manager.cache_package_info(cache_key, {
+                        'license_data': None,
+                        'source': 'deps.dev_error'
+                    })
 
             # Process license information
             if license_data:
@@ -153,6 +345,15 @@ def enrich_sbom_with_intelligent_resolution(input_sbom_path, output_sbom_path, c
                 resolved_licenses = []
                 if resolve_licenses and license_resolver:
                     for orig_license in licenses:
+                        # Special handling for "non-standard" - try Maven POM fallback only if deps.dev didn't provide details
+                        if orig_license == "non-standard" and ecosystem == "maven":
+                            # Only use POM fallback if deps.dev didn't already provide the detailed license
+                            if not any("Eclipse Public License" in str(lic) for lic in licenses):
+                                real_license = get_maven_license_from_pom(package_name, version)
+                                if real_license:
+                                    logging.info(f"🔍 Found real license in POM for {package_name}: {real_license}")
+                                    orig_license = real_license
+                        
                         resolution_result = license_resolver.resolve_license(orig_license)
                         
                         if resolution_result['resolved']:
@@ -190,15 +391,15 @@ def enrich_sbom_with_intelligent_resolution(input_sbom_path, output_sbom_path, c
                         # Multiple licenses - create SPDX expression
                         pkg["licenseConcluded"] = " AND ".join(resolved_licenses)
                     
-                    logging.info(f"ENRICHED: {clean_purl} -> {pkg['licenseConcluded']}")
+                    logging.info(f"ENRICHED: {package_name} -> {pkg['licenseConcluded']}")
                     enriched += 1
                 else:
-                    logging.warning(f"NO LICENSE FOUND: {clean_purl} -> UNKNOWN")
+                    logging.warning(f"NO LICENSE FOUND: {package_name} -> UNKNOWN")
                     skipped += 1
                     if purl not in skipped_packages["not_found"]:
                         skipped_packages["not_found"].append(purl)
             else:
-                logging.warning(f"NO LICENSE FOUND: {clean_purl} -> UNKNOWN")
+                logging.warning(f"NO LICENSE FOUND: {package_name} -> UNKNOWN")
                 skipped += 1
                 if purl not in skipped_packages["not_found"]:
                     skipped_packages["not_found"].append(purl)
