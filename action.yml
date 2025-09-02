@@ -190,8 +190,9 @@ runs:
           INTERNAL_DEPENDENCY_PATTERN_ARG="--internal-dependency-pattern ${{ inputs.internal_dependency_pattern }}"
         fi
 
-        python ${{ github.action_path }}/helpers/audit_licenses.py sbom_enriched.json $POLICY_FILE --markdown --debug $PACKAGE_POLICY_ARG $OPENAI_ARG $AI_PROVIDER_ARGS $INTERNAL_DEPENDENCY_PATTERN_ARG > license-audit-report.md || AUDIT_EXIT_CODE=$?
+        python ${{ github.action_path }}/helpers/audit_licenses.py sbom_enriched.json $POLICY_FILE --markdown --debug $PACKAGE_POLICY_ARG $OPENAI_ARG $AI_PROVIDER_ARGS $INTERNAL_DEPENDENCY_PATTERN_ARG --generate-summary > license-audit-report.md || AUDIT_EXIT_CODE=$?
         
+        # The audit script now writes directly to GITHUB_STEP_SUMMARY
         cat license-audit-report.md >> $GITHUB_STEP_SUMMARY
         echo "AUDIT_EXIT_CODE=${AUDIT_EXIT_CODE}" >> $GITHUB_OUTPUT
 

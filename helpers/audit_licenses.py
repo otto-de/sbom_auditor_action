@@ -75,6 +75,38 @@ def find_license_policy(license_id, license_policies):
     return None
 
 
+def generate_summary_table(total_packages, internal_packages, gh_actions_count, denied_count, needs_review_count, resolved_count=0):
+    """Generates a summary table and appends it to the GITHUB_STEP_SUMMARY file."""
+    summary_file = os.environ.get('GITHUB_STEP_SUMMARY')
+    if not summary_file:
+        logging.debug("GITHUB_STEP_SUMMARY environment variable not set. Skipping summary table generation.")
+        return
+
+    summary_content = f"""
+### 📊 License Audit Summary
+
+| Category | Count |
+| :--- | :---: |
+| Total Packages in SBOM | {total_packages} |
+| Denied Packages | {denied_count} |
+| Packages Needing Review | {needs_review_count} |
+| Internal Packages Skipped | {internal_packages} |
+| GitHub Actions | {gh_actions_count} |"""
+
+    if resolved_count > 0:
+        summary_content += f"""
+| Licenses Resolved | {resolved_count} |"""
+
+    summary_content += "\n\n"
+
+    try:
+        with open(summary_file, 'a', encoding='utf-8') as f:
+            f.write(summary_content)
+        logging.info(f"Successfully wrote audit summary to {summary_file}")
+    except Exception as e:
+        logging.error(f"Failed to write to GITHUB_STEP_SUMMARY file: {e}")
+
+
 def audit_component_with_resolution(component, license_policies, package_policies, 
                                    license_resolver=None, internal_dependency_patterns=None):
     """
@@ -278,11 +310,41 @@ def audit_licenses_with_resolution(sbom_path, policy_path, package_policy_path=N
 
     # Generate compliance report
     policy_counts = {}
+    denied = []
+    needs_review = []
+    allowed = []
+    internal = []
+    gh_actions_count = 0
+    
     for result in all_audit_results:
         policy = result.get('policy', 'unknown')
         # Clean up policy strings for counting
         clean_policy = policy.split(' (')[0]  # Remove " (package policy)" suffix
         policy_counts[clean_policy] = policy_counts.get(clean_policy, 0) + 1
+        
+        # Categorize results for summary and reporting
+        if clean_policy == 'deny':
+            denied.append(result)
+        elif clean_policy == 'needs-review':
+            needs_review.append(result)
+        elif clean_policy == 'internal':
+            internal.append(result)
+        elif clean_policy == 'allow':
+            allowed.append(result)
+            # Count GitHub Actions
+            if result.get('purl', '').startswith('pkg:githubactions/'):
+                gh_actions_count += 1
+
+    # Generate GitHub Step Summary
+    total_resolved = sum(resolution_stats.values()) if resolution_stats else 0
+    generate_summary_table(
+        len(all_audit_results), 
+        len(internal), 
+        gh_actions_count, 
+        len(denied), 
+        len(needs_review),
+        total_resolved
+    )
 
     # Print summary
     print(f"✅ Audit completed. {len(all_audit_results)} components processed.")
@@ -294,26 +356,97 @@ def audit_licenses_with_resolution(sbom_path, policy_path, package_policy_path=N
     for policy, count in sorted(policy_counts.items()):
         print(f"  {policy}: {count}")
 
+    # Generate AI summary if requested
+    ai_summary = None
+    if generate_ai_summary_flag:
+        logging.info("🤖 Generating AI compliance summary...")
+        try:
+            # Create summary data in the expected format
+            summary_data = {
+                "audit_results": all_audit_results,
+                "policy_summary": policy_counts,
+                "total_components": len(all_audit_results),
+                "resolution_stats": resolution_stats if resolution_stats else {},
+                "denied": denied,
+                "needs_review": needs_review,
+                "allowed": allowed,
+                "internal": internal
+            }
+            ai_summary = generate_summary(summary_data)
+            logging.info(f"✅ AI summary generated successfully")
+        except Exception as e:
+            logging.error(f"Failed to generate AI summary: {e}")
+            ai_summary = f"Error generating summary: {str(e)}"
+
     # Prepare output
     output = {
         "audit_results": all_audit_results,
         "policy_summary": policy_counts,
         "total_components": len(all_audit_results),
-        "resolution_stats": resolution_stats if resolution_stats else {}
+        "resolution_stats": resolution_stats if resolution_stats else {},
+        "denied": denied,
+        "needs_review": needs_review,
+        "allowed": allowed,
+        "internal": internal
     }
     
-    # Generate AI summary if requested
-    if generate_ai_summary_flag:
-        logging.info("🤖 Generating AI compliance summary...")
-        try:
-            summary = generate_summary(output)
-            output["ai_summary"] = summary
-            print(f"\n🤖 AI Summary:\n{summary}")
-        except Exception as e:
-            logging.error(f"Failed to generate AI summary: {e}")
-            output["ai_summary"] = f"Error generating summary: {str(e)}"
+    if ai_summary:
+        output["ai_summary"] = ai_summary
     
     return output
+
+
+def generate_markdown_report(denied, needs_review, internal, allowed, ai_summary=None, resolution_stats=None):
+    """Generates a markdown report for the audit results."""
+    report = ""
+    
+    if ai_summary:
+        report += f"{ai_summary}\n\n"
+    
+    if resolution_stats:
+        report += "### 🎯 License Resolution Statistics\n\n"
+        report += "| Resolution Method | Count |\n"
+        report += "| :--- | :---: |\n"
+        for method, count in sorted(resolution_stats.items()):
+            report += f"| {method} | {count} |\n"
+        report += "\n"
+    
+    report += "## License Audit Report\n\n"
+    
+    if denied:
+        report += "### ❌ DENIED PACKAGES\n\n"
+        report += "| Package | License | Policy | PURL |\n"
+        report += "| :--- | :--- | :--- | :--- |\n"
+        for item in denied:
+            license_display = item.get('license_original', item.get('license', 'N/A'))
+            if 'resolution' in item:
+                license_display += f" → **{item['license']}**"
+            report += f"| `{item['package']}` | `{license_display}` | **{item['policy']}** | `{item['purl']}` |\n"
+        report += "\n"
+    
+    if needs_review:
+        report += "### ⚠️ PACKAGES NEEDING REVIEW\n\n"
+        report += "| Package | License | Policy | PURL |\n"
+        report += "| :--- | :--- | :--- | :--- |\n"
+        for item in needs_review:
+            license_display = item.get('license_original', item.get('license', 'N/A'))
+            if 'resolution' in item:
+                license_display += f" → **{item['license']}**"
+            report += f"| `{item['package']}` | `{license_display}` | {item['policy']} | `{item['purl']}` |\n"
+        report += "\n"
+
+    if internal:
+        report += "### 🏠 SKIPPED INTERNAL PACKAGES\n\n"
+        report += "| Package | PURL |\n"
+        report += "| :--- | :--- |\n"
+        for item in internal:
+            report += f"| `{item['package']}` | `{item['purl']}` |\n"
+        report += "\n"
+
+    if not denied and not needs_review:
+        report += "✅ **All packages conform to the license policy.**\n\n"
+    
+    print(report)
 
 
 if __name__ == "__main__":
@@ -328,6 +461,8 @@ if __name__ == "__main__":
                         help="Disable intelligent license resolution")
     parser.add_argument("--generate-summary", action="store_true", 
                         help="Generate AI-powered compliance summary")
+    parser.add_argument("--markdown", action="store_true", 
+                        help="Output the report as a Markdown table")
     parser.add_argument("--output", help="Output JSON file (optional)")
     parser.add_argument("--debug", action="store_true", help="Enable debug logging")
 
@@ -344,12 +479,26 @@ if __name__ == "__main__":
         args.generate_summary
     )
 
+    # Determine if we need to force markdown output
+    force_markdown = args.markdown or hasattr(sys.stdout, 'isatty') and not sys.stdout.isatty()
+    
+    if force_markdown and not (args.output and not args.markdown):
+        # Generate markdown report
+        generate_markdown_report(
+            results.get('denied', []),
+            results.get('needs_review', []), 
+            results.get('internal', []),
+            results.get('allowed', []),
+            results.get('ai_summary'),
+            results.get('resolution_stats', {})
+        )
+
     # Save output if requested
     if args.output:
         with open(args.output, 'w') as f:
             json.dump(results, f, indent=2)
         print(f"💾 Results saved to {args.output}")
-    else:
-        # Print detailed results to stdout
+    elif not force_markdown:
+        # Print detailed results to stdout only if not in markdown mode
         print(f"\n📋 Detailed Results:")
         print(json.dumps(results, indent=2))
