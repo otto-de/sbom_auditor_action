@@ -3749,9 +3749,9 @@
             "name": "Weird unknown license",
             "family": "dummy289",
             "reference": "",
-            "usagePolicy": "deny",
+            "usagePolicy": "needs-review",
             "annotationRefs": [
-                "PROHIBITED"
+                "NEEDS-APPROVAL"
             ],
             "urls": [
                 ""
@@ -3762,9 +3762,9 @@
             "name": "non-standard",
             "family": "non-standard",
             "reference": "",
-            "usagePolicy": "deny",
+            "usagePolicy": "needs-review",
             "annotationRefs": [
-                "PROHIBITED"
+                "NEEDS-APPROVAL"
             ],
             "urls": [
                 ""
