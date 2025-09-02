@@ -267,7 +267,7 @@ def _generate_github_summary(github_token, prompt, model_name=None):
         # Clean up the summary formatting
         clean_summary = _clean_markdown_formatting(summary)
         
-        return f"\n## AI-Assisted Summary (GitHub Models)\n\n{clean_summary}\n"
+        return f"\n### AI-Assisted Summary (GitHub Models)\n\n{clean_summary}\n"
         
     except requests.exceptions.Timeout:
         raise ValueError("GitHub Models API request timed out")

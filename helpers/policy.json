@@ -3899,6 +3899,50 @@
             "urls": [
                 ""
             ]
+        },
+        {
+            "id": "BSD-3-Clause",
+            "name": "BSD 3-Clause \"New\" or \"Revised\" License",
+            "family": "BSD",
+            "reference": "https://spdx.org/licenses/BSD-3-Clause.html",
+            "usagePolicy": "allow",
+            "annotationRefs": [
+                "APPROVED"
+            ],
+            "urls": []
+        },
+        {
+            "id": "EPL-1.0",
+            "name": "Eclipse Public License 1.0",
+            "family": "EPL",
+            "reference": "https://spdx.org/licenses/EPL-1.0.html",
+            "usagePolicy": "allow",
+            "annotationRefs": [
+                "APPROVED"
+            ],
+            "urls": []
+        },
+        {
+            "id": "EPL-2.0",
+            "name": "Eclipse Public License 2.0",
+            "family": "EPL",
+            "reference": "https://spdx.org/licenses/EPL-2.0.html",
+            "usagePolicy": "allow",
+            "annotationRefs": [
+                "APPROVED"
+            ],
+            "urls": []
+        },
+        {
+            "id": "Public-Domain",
+            "name": "Public Domain",
+            "family": "Public-Domain",
+            "reference": "https://en.wikipedia.org/wiki/Public_domain",
+            "usagePolicy": "allow",
+            "annotationRefs": [
+                "APPROVED"
+            ],
+            "urls": []
         }
     ]
 }

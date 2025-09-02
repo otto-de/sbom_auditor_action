@@ -16,6 +16,7 @@ import fnmatch
 import os
 from ai_summary import generate_summary
 from license_resolver import LicenseResolver
+from spdx_expression_parser import SPDXExpressionParser
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -68,11 +69,15 @@ def find_package_policy(purl, package_policies):
 
 
 def find_license_policy(license_id, license_policies):
-    """Finds the policy for a given license ID."""
-    for policy in license_policies:
-        if policy.get('id') == license_id:
-            return policy.get('usagePolicy')
-    return None
+    """Finds the policy for a given license ID with SPDX expression support."""
+    # Initialize SPDX parser
+    parser = SPDXExpressionParser()
+    
+    # Parse and evaluate SPDX expression
+    policy, explanation = parser.parse_and_evaluate(license_id, license_policies)
+    
+    logging.debug(f"License policy evaluation: '{license_id}' → {policy} ({explanation})")
+    return policy
 
 
 def generate_summary_table(total_packages, internal_packages, gh_actions_count, denied_count, needs_review_count, resolved_count=0):
