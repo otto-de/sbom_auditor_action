@@ -263,7 +263,7 @@ def audit_licenses_with_resolution(sbom_path, policy_path, package_policy_path=N
     sbom_data = load_json_file(sbom_path, "SBOM")
     policy_data = load_json_file(policy_path, "Policy")
     
-    license_policies = policy_data.get('licenses', [])
+    license_policies = policy_data.get('policies', [])
     
     package_policies = []
     if package_policy_path:
