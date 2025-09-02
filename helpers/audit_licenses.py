@@ -133,10 +133,20 @@ def audit_component_with_resolution(component, license_policies, package_policie
     license_concluded = component.get('licenseConcluded')
 
     # Check if the component matches any of the internal dependency patterns
+    # Default internal patterns if none provided
+    if not internal_dependency_patterns:
+        internal_dependency_patterns = [
+            r'.*de\.otto\..*',      # Otto internal packages
+            r'.*com\.otto\..*',     # Otto internal packages alternative
+            r'pkg:maven/de\.otto\..*',  # Maven Otto packages
+            r'pkg:maven/com\.otto\..*', # Maven Otto packages alternative
+        ]
+    
     if internal_dependency_patterns:
         for pattern in internal_dependency_patterns:
-            if re.match(pattern, purl):
-                logging.info(f"  Skipping internal dependency: {purl} (matches pattern: '{pattern}')")
+            # Check both PURL and component name
+            if (purl and re.match(pattern, purl)) or (component_name and re.match(pattern, component_name)):
+                logging.info(f"  Skipping internal dependency: {purl or component_name} (matches pattern: '{pattern}')")
                 return [{"package": f"{component_name}@{component_version}", "purl": purl, "policy": "internal"}]
     
     logging.debug(f"Processing component: {component_name}@{component_version} ({purl})")
