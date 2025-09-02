@@ -2,6 +2,11 @@
 # Copyright (c) 2025 Otto GmbH & Co KG
 # SPDX-License-Identifier: Apache-2.0
 
+"""
+Enhanced License Auditing with Intelligent Resolution
+Audits SBOM licenses with automatic resolution of unknown/non-standard licenses.
+"""
+
 import json
 import sys
 import argparse
@@ -10,9 +15,11 @@ import re
 import fnmatch
 import os
 from ai_summary import generate_summary
+from license_resolver import LicenseResolver
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
 
 def load_json_file(file_path, file_type):
     """Loads a JSON file and returns its content."""
@@ -29,11 +36,13 @@ def load_json_file(file_path, file_type):
         print(f"Error decoding {file_type} JSON from {file_path}: {e}")
         sys.exit(1)
 
+
 def extract_components(sbom_data):
     """Extracts components from SBOM data."""
     components = sbom_data.get('packages', []) or sbom_data.get('components', [])
     logging.debug(f"Found {len(components)} packages/components in SBOM.")
     return components
+
 
 def get_purl(component):
     """Extracts PURL from a component."""
@@ -43,31 +52,44 @@ def get_purl(component):
                 return ref.get('referenceLocator')
     return "purl-not-found"
 
+
 def find_package_policy(purl, package_policies):
     """Finds a matching package policy based on PURL and matcher logic."""
     normalized_purl = purl.split('?')[0]
 
     for policy in package_policies:
         policy_purl = policy.get('purl', '')
-        matcher = policy.get('matcher', 'exact')
-        normalized_policy_purl = policy_purl.split('?')[0]
+        normalized_policy_purl = policy_purl.split('?')[0] if policy_purl else ''
 
-        if matcher == 'exact':
-            if normalized_purl == normalized_policy_purl:
-                return policy
-        elif matcher == 'all-versions':
-            # Use rsplit to handle scoped packages like @angular/core correctly
-            purl_without_version = normalized_purl.rsplit('@', 1)[0]
-            policy_purl_without_version = normalized_policy_purl.rsplit('@', 1)[0]
-            if purl_without_version == policy_purl_without_version:
-                return policy
-        elif matcher == 'wildcard':
+        if normalized_policy_purl:
             if fnmatch.fnmatch(normalized_purl, normalized_policy_purl):
                 return policy
     return None
 
-def audit_component(component, license_policies, package_policies, internal_dependency_patterns=None):
-    """Audits a single component and returns its single, most restrictive audit status."""
+
+def find_license_policy(license_id, license_policies):
+    """Finds the policy for a given license ID."""
+    for policy in license_policies:
+        if policy.get('id') == license_id:
+            return policy.get('usagePolicy')
+    return None
+
+
+def audit_component_with_resolution(component, license_policies, package_policies, 
+                                   license_resolver=None, internal_dependency_patterns=None):
+    """
+    Audits a single component with intelligent license resolution.
+    
+    Args:
+        component: Component to audit
+        license_policies: License policies from policy.json
+        package_policies: Package-specific policies
+        license_resolver: LicenseResolver instance (optional)
+        internal_dependency_patterns: Patterns for internal dependencies
+        
+    Returns:
+        List of audit results for the component
+    """
     component_name = component.get('name')
     component_version = component.get('versionInfo')
     purl = get_purl(component)
@@ -96,10 +118,7 @@ def audit_component(component, license_policies, package_policies, internal_depe
             "policy": f"{policy} (package policy)"
         }]
 
-    # 2. Continue with license-based audit if no package policy is found
-    logging.debug(f"  License concluded: {license_concluded}")
-
-    # Handle cases with no license
+    # 2. Handle cases with no license
     if not license_concluded or license_concluded in ['NOASSERTION', 'NONE']:
         policy = "needs-review"
         if purl.startswith('pkg:githubactions/'):
@@ -115,290 +134,222 @@ def audit_component(component, license_policies, package_policies, internal_depe
             "policy": policy
         }]
 
-    # Corrected regex to split license expressions
-    # We are keeping this simple and not building a full SPDX parser.
-    # We split by operators, parentheses, and commas, and then check each part.
-    # We no longer split by WITH to avoid breaking up valid license IDs like 'GPL-2.0-with-classpath-exception'.
-    # We also no longer split by comma, as it's not a standard SPDX operator.
-    license_ids_raw = re.split(r'\b(AND|OR)\b|\(|\)|,', license_concluded, flags=re.IGNORECASE)
+    # 3. Try intelligent license resolution for unknown/problematic licenses
+    original_license = license_concluded
+    resolved_license = license_concluded
+    resolution_info = None
     
-    # Determine the most restrictive policy from all parts of the license expression
-    most_restrictive_policy = "allow"
-    final_license_id = license_concluded # Default to the full expression
+    # Check if license needs resolution
+    needs_resolution = (
+        license_concluded in ['non-standard', 'Weird unknown license'] or
+        find_license_policy(license_concluded, license_policies) is None
+    )
     
-    found_licenses = []
-
-    for license_id in license_ids_raw:
-        # Defensive check to prevent AttributeError on NoneType
-        if not license_id:
-            continue
-        license_id = license_id.strip()
-        # Also ignore the operators themselves
-        if not license_id or license_id.upper() in ['AND', 'OR']:
-            continue
+    if needs_resolution and license_resolver:
+        logging.info(f"🔍 Attempting to resolve unknown license: '{license_concluded}'")
         
-        found_licenses.append(license_id)
-        logging.debug(f"  Checking license: {license_id}")
-        policy = license_policies.get(license_id)
+        # Try to get the original license name from enrichment metadata
+        original_license_name = license_concluded
+        if 'enrichment' in component and 'licenseResolutions' in component['enrichment']:
+            # This license might have been resolved during enrichment
+            for res in component['enrichment']['licenseResolutions']:
+                if res.get('resolved') == license_concluded:
+                    original_license_name = res.get('original', license_concluded)
+                    break
         
-        current_policy = "needs-review (not in policy)"
-        if policy:
-            current_policy = policy.get('usagePolicy')
-            logging.debug(f"    FOUND POLICY: {license_id} -> {current_policy}")
+        resolution_result = license_resolver.resolve_license(original_license_name)
+        
+        if resolution_result['resolved']:
+            resolved_license = resolution_result['resolved']
+            resolution_info = {
+                'original': original_license_name,
+                'resolved': resolved_license,
+                'method': resolution_result['method'],
+                'confidence': resolution_result['confidence']
+            }
+            
+            logging.info(f"✅ Resolved '{original_license_name}' → '{resolved_license}' "
+                        f"({resolution_result['method']})")
+            
+            # Update component with resolution info
+            if 'enrichment' not in component:
+                component['enrichment'] = {}
+            if 'auditResolution' not in component['enrichment']:
+                component['enrichment']['auditResolution'] = resolution_info
         else:
-            logging.warning(f"    NO POLICY: {license_id} -> needs-review (package: {component_name}@{component_version})")
+            logging.warning(f"⚠️ Could not resolve license: '{original_license_name}'")
 
-        # Update most restrictive policy: deny > needs-review > allow
-        if current_policy == 'deny':
-            most_restrictive_policy = 'deny'
-            final_license_id = license_id # This is the one causing denial
-            logging.debug(f"    DENY POLICY: {license_id} -> setting final policy to deny")
-        elif 'needs-review' in str(current_policy) and most_restrictive_policy != 'deny':
-            most_restrictive_policy = current_policy
-            final_license_id = license_id # This one needs review
-            logging.debug(f"    REVIEW POLICY: {license_id} -> setting final policy to {current_policy}")
+    # 4. Check policy for the (potentially resolved) license
+    final_license = resolved_license
+    license_policy = find_license_policy(final_license, license_policies)
     
-    # If after checking all licenses, none were found, it's an issue.
-    if not found_licenses:
-         logging.warning(f"    Could not parse any license from '{license_concluded}' for package {component_name}@{component_version}. Marking for review.")
-         return [{
-            "package": f"{component_name}@{component_version}",
-            "purl": purl,
-            "license": license_concluded,
-            "policy": "needs-review (unparsable)"
-        }]
+    if license_policy:
+        policy = license_policy
+        logging.debug(f"  Found policy for {final_license}: {policy}")
+    else:
+        policy = "needs-review"
+        logging.warning(f"  No policy found for license '{final_license}'. Marking for review.")
 
-    # If the overall policy is 'allow', we display the original full license string.
-    # Otherwise, we display the specific license that caused the more restrictive policy.
-    if most_restrictive_policy == 'allow':
-        final_license_id = license_concluded
-
+    # 5. Build audit result
     result = {
         "package": f"{component_name}@{component_version}",
         "purl": purl,
-        "license": final_license_id,
-        "policy": most_restrictive_policy
+        "license": final_license,
+        "policy": policy
     }
     
-    logging.info(f"  FINAL RESULT: {component_name}@{component_version} -> {final_license_id} -> {most_restrictive_policy}")
+    # Add resolution info if license was resolved
+    if resolution_info:
+        result['resolution'] = resolution_info
+        result['license_original'] = original_license
     
     return [result]
 
 
-def generate_summary_table(total_packages, internal_packages, gh_actions_count, denied_count, needs_review_count):
-    """Generates a summary table and appends it to the GITHUB_STEP_SUMMARY file."""
-    summary_file = os.environ.get('GITHUB_STEP_SUMMARY')
-    if not summary_file:
-        logging.debug("GITHUB_STEP_SUMMARY environment variable not set. Skipping summary table generation.")
-        return
-
-    summary_content = f"""
-### License Audit Summary
-
-| Category | Count |
-| :--- | :---: |
-| Total Packages in SBOM | {total_packages} |
-| Denied Packages | {denied_count} |
-| Packages Needing Review | {needs_review_count} |
-| Internal Packages Skipped | {internal_packages} |
-| GitHub Actions | {gh_actions_count} |
-"""
-
-    try:
-        with open(summary_file, 'a', encoding='utf-8') as f:
-            f.write(summary_content)
-        logging.info(f"Successfully wrote audit summary to {summary_file}")
-    except Exception as e:
-        logging.error(f"Failed to write to GITHUB_STEP_SUMMARY file: {e}")
-
-
-def generate_report(denied, needs_review, allowed, internal, debug, markdown, openai_api_key=None, ai_provider="openai", azure_endpoint=None, azure_deployment=None, aws_region=None, ai_model_name=None):
-    """Generates and prints the license audit report."""
-    report = ""
-    
-    # Determine if AI summary should be generated based on provider and available credentials
-    should_generate_ai_summary = False
-    api_key_for_ai = None
-    
-    if ai_provider.lower() == "github":
-        # For GitHub Models, use GITHUB_TOKEN from environment or the provided openai_api_key
-        github_token = os.getenv('GITHUB_TOKEN') or openai_api_key
-        if github_token:
-            should_generate_ai_summary = True
-            api_key_for_ai = github_token
-    elif openai_api_key:
-        # For other providers (OpenAI, Azure, Bedrock), use the provided API key
-        should_generate_ai_summary = True
-        api_key_for_ai = openai_api_key
-    
-    if should_generate_ai_summary:
-        try:
-            ai_summary = generate_summary(api_key_for_ai, denied, needs_review, ai_provider, azure_endpoint, azure_deployment, aws_region, ai_model_name)
-            if ai_summary and ai_summary.strip():
-                report += ai_summary
-            else:
-                logging.warning(f"AI summary generation returned empty result for provider: {ai_provider}")
-        except Exception as e:
-            logging.error(f"Failed to generate AI summary with {ai_provider}: {e}")
-            report += f"\n### AI-Assisted Summary\n\nError: Could not generate AI summary using {ai_provider}. {str(e)}\n"
-
-    if markdown:
-        report += "## License Audit Report\n\n"
-        if denied:
-            report += "### DENIED PACKAGES\n\n"
-            report += "| Package | License | Policy | PURL |\n"
-            report += "| :--- | :--- | :--- | :--- |\n"
-            for item in denied:
-                report += f"| `{item['package']}` | `{item['license']}` | **{item['policy']}** | `{item['purl']}` |\n"
-            report += "\n"
-        
-        if needs_review:
-            report += "### PACKAGES NEEDING REVIEW\n\n"
-            report += "| Package | License | Policy | PURL |\n"
-            report += "| :--- | :--- | :--- | :--- |\n"
-            for item in needs_review:
-                report += f"| `{item['package']}` | `{item['license']}` | {item['policy']} | `{item['purl']}` |\n"
-            report += "\n"
-
-        if internal:
-            report += "### SKIPPED INTERNAL PACKAGES\n\n"
-            report += "| Package | PURL |\n"
-            report += "| :--- | :--- |\n"
-            for item in internal:
-                report += f"| `{item['package']}` | `{item['purl']}` |\n"
-            report += "\n"
-
-        if debug and allowed:
-            report += "### ALLOWED PACKAGES (DEBUG)\n\n"
-            report += "| Package | License | Policy | PURL |\n"
-            report += "| :--- | :--- | :--- | :--- |\n"
-            for item in allowed:
-                report += f"| `{item['package']}` | `{item['license']}` | {item['policy']} | `{item['purl']}` |\n"
-            report += "\n"
-
-        if not denied and not needs_review:
-            report += "\nAll packages conform to the license policy.\n"
-        
-        print(report)
-    else:
-        print(report) # Print AI summary if available
-        print("--- License Audit Report ---")
-        
-        if denied:
-            print("\n--- DENIED PACKAGES ---")
-            for item in denied:
-                print(f"Package: {item['package']}\n  License: {item['license']}\n  Policy: {item['policy']}\n  PURL: {item['purl']}")
-
-        if needs_review:
-            print("\n--- PACKAGES NEEDING REVIEW ---")
-            for item in needs_review:
-                print(f"Package: {item['package']}\n  License: {item['license']}\n  Policy: {item['policy']}\n  PURL: {item['purl']}")
-
-        if internal:
-            print("\n--- SKIPPED INTERNAL PACKAGES ---")
-            for item in internal:
-                print(f"Package: {item['package']}\n  PURL: {item['purl']}")
-
-        if debug and allowed:
-            print("\n--- ALLOWED PACKAGES (DEBUG) ---")
-            for item in allowed:
-                print(f"Package: {item['package']}\n  License: {item['license']}\n  Policy: {item['policy']}\n  PURL: {item['purl']}")
-
-        if not denied and not needs_review:
-            print("\nAll packages conform to the license policy.")
-
-        print("\n--- End of Report ---")
-
-def audit_licenses(sbom_path, policy_path, package_policy_path=None, debug=False, markdown=False, openai_api_key=None, internal_dependency_patterns=None, ai_provider="openai", azure_endpoint=None, azure_deployment=None, aws_region=None, ai_model_name=None):
+def audit_licenses_with_resolution(sbom_path, policy_path, package_policy_path=None, 
+                                  internal_dependencies_file=None, resolve_licenses=True, 
+                                  generate_ai_summary_flag=False):
     """
-    Audits licenses in an SBOM file against a policy file.
+    Main function to audit licenses with intelligent resolution.
+    
+    Args:
+        sbom_path: Path to SBOM file
+        policy_path: Path to policy.json
+        package_policy_path: Path to package policies (optional)
+        internal_dependencies_file: Path to internal dependencies file (optional)
+        resolve_licenses: Whether to use intelligent license resolution
+        generate_ai_summary_flag: Whether to generate AI summary
+        
+    Returns:
+        Dictionary with audit results
     """
-    if debug:
-        logging.getLogger().setLevel(logging.DEBUG)
-
-    logging.debug(f"Starting license audit with sbom: {sbom_path}, policy: {policy_path}")
-
+    
+    # Load data files
     sbom_data = load_json_file(sbom_path, "SBOM")
     policy_data = load_json_file(policy_path, "Policy")
-    license_policies = {policy['id']: policy for policy in policy_data['policies']}
-    logging.debug(f"Loaded {len(license_policies)} license policies.")
-
-    patterns_list = []
-    if internal_dependency_patterns:
-        patterns_list = [p.strip() for p in internal_dependency_patterns.split('\n') if p.strip()]
-        logging.debug(f"Loaded {len(patterns_list)} internal dependency patterns.")
-
+    
+    license_policies = policy_data.get('licenses', [])
+    
     package_policies = []
     if package_policy_path:
-        try:
-            package_policy_data = load_json_file(package_policy_path, "Package Policy")
-            package_policies = package_policy_data.get('packagePolicies', [])
-            logging.debug(f"Loaded {len(package_policies)} package-specific policies.")
-        except SystemExit:
-            # A SystemExit is raised by load_json_file if the file is not found.
-            # We can ignore this for the optional package policy file.
-            logging.warning(f"Package policy file not found at {package_policy_path}, continuing without it.")
-            pass
-
-    needs_review = []
-    denied = []
-    allowed = []
-    internal = []
-    gh_actions_count = 0
-
-    # Correctly access the nested SBOM data
-    if 'sbom' in sbom_data:
-        sbom_data = sbom_data['sbom']
-
-    components = extract_components(sbom_data)
-    for component in components:
-        # Count GitHub Actions
-        purl = get_purl(component)
-        if purl.startswith('pkg:githubactions/'):
-            gh_actions_count += 1
-
-        results = audit_component(component, license_policies, package_policies, patterns_list)
-        for result in results:
-            policy_str = result['policy'].lower()
-            if 'needs-review' in policy_str or 'not in policy' in policy_str:
-                needs_review.append(result)
-            elif 'deny' in policy_str:
-                denied.append(result)
-            elif 'allow' in policy_str:
-                allowed.append(result)
-            elif 'internal' in policy_str:
-                internal.append(result)
-
-    logging.debug("Finished processing all components.")
-    logging.debug(f"Denied: {len(denied)}, Needs Review: {len(needs_review)}, Allowed: {len(allowed)}, Internal: {len(internal)}")
-
-    generate_report(denied, needs_review, allowed, internal, debug, markdown, openai_api_key, ai_provider, azure_endpoint, azure_deployment, aws_region, ai_model_name)
-
-    # Generate summary table for GitHub Actions summary
-    total_packages = len(components)
-    generate_summary_table(total_packages, len(internal), gh_actions_count, len(denied), len(needs_review))
-
-    if denied or needs_review:
-        logging.info("Found packages that are denied or need review. Exiting with status 1.")
-        sys.exit(1)
-    else:
-        logging.info("All packages conform to the license policy.")
-
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='Audits licenses in an SBOM file against a policy file.')
-    parser.add_argument('sbom_path', help='Path to the enriched SBOM JSON file.')
-    parser.add_argument('policy_path', help='Path to the policy JSON file.')
-    parser.add_argument('--package-policy-path', help='Path to the optional package policy JSON file.')
-    parser.add_argument('--openai-api-key', help='Optional OpenAI API key for generating an AI-assisted summary.')
-    parser.add_argument('--ai-provider', default='openai', choices=['openai', 'azure', 'bedrock', 'github'], help='AI provider to use for summary generation.')
-    parser.add_argument('--azure-endpoint', help='Azure OpenAI endpoint URL (required for azure provider).')
-    parser.add_argument('--azure-deployment', help='Azure OpenAI deployment name (required for azure provider).')
-    parser.add_argument('--aws-region', help='AWS region for Bedrock (required for bedrock provider).')
-    parser.add_argument('--ai-model-name', help='Specific AI model name to use (optional, provider-specific defaults will be used).')
-    parser.add_argument('--internal-dependency-pattern', help='A newline-separated list of regex patterns to identify internal dependencies that should be skipped from the audit.')
-    parser.add_argument('--debug', action='store_true', help='Enable debug reporting for allowed packages and verbose logging.')
-    parser.add_argument('--markdown', action='store_true', help='Output the report as a Markdown table.')
+        package_policy_data = load_json_file(package_policy_path, "Package Policy")
+        package_policies = package_policy_data.get('packages', [])
     
+    internal_dependency_patterns = []
+    if internal_dependencies_file:
+        internal_deps_data = load_json_file(internal_dependencies_file, "Internal Dependencies")
+        internal_dependency_patterns = internal_deps_data.get('patterns', [])
+
+    # Initialize license resolver if enabled
+    license_resolver = None
+    if resolve_licenses:
+        ai_api_key = os.getenv('GITHUB_TOKEN')  # Use GitHub token for GitHub Models
+        license_resolver = LicenseResolver(api_key=ai_api_key, ai_provider='github')
+        logging.info("✨ Intelligent license resolution enabled")
+    
+    # Handle nested SBOM structure
+    sbom_content = sbom_data.get("sbom", sbom_data)
+    components = extract_components(sbom_content)
+    
+    logging.info(f"Starting audit of {len(components)} components...")
+    
+    # Audit components
+    all_audit_results = []
+    resolution_stats = {}
+    
+    for component in components:
+        audit_results = audit_component_with_resolution(
+            component, license_policies, package_policies, 
+            license_resolver, internal_dependency_patterns
+        )
+        all_audit_results.extend(audit_results)
+        
+        # Track resolution statistics
+        for result in audit_results:
+            if 'resolution' in result:
+                method = result['resolution']['method']
+                resolution_stats[method] = resolution_stats.get(method, 0) + 1
+
+    # Print resolution statistics
+    if resolution_stats:
+        logging.info("📊 License resolution statistics:")
+        for method, count in sorted(resolution_stats.items()):
+            logging.info(f"   {method}: {count}")
+
+    # Generate compliance report
+    policy_counts = {}
+    for result in all_audit_results:
+        policy = result.get('policy', 'unknown')
+        # Clean up policy strings for counting
+        clean_policy = policy.split(' (')[0]  # Remove " (package policy)" suffix
+        policy_counts[clean_policy] = policy_counts.get(clean_policy, 0) + 1
+
+    # Print summary
+    print(f"✅ Audit completed. {len(all_audit_results)} components processed.")
+    if resolution_stats:
+        total_resolved = sum(resolution_stats.values())
+        print(f"🎯 Licenses resolved: {total_resolved}")
+    
+    print("\n📊 License Policy Summary:")
+    for policy, count in sorted(policy_counts.items()):
+        print(f"  {policy}: {count}")
+
+    # Prepare output
+    output = {
+        "audit_results": all_audit_results,
+        "policy_summary": policy_counts,
+        "total_components": len(all_audit_results),
+        "resolution_stats": resolution_stats if resolution_stats else {}
+    }
+    
+    # Generate AI summary if requested
+    if generate_ai_summary_flag:
+        logging.info("🤖 Generating AI compliance summary...")
+        try:
+            summary = generate_summary(output)
+            output["ai_summary"] = summary
+            print(f"\n🤖 AI Summary:\n{summary}")
+        except Exception as e:
+            logging.error(f"Failed to generate AI summary: {e}")
+            output["ai_summary"] = f"Error generating summary: {str(e)}"
+    
+    return output
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Audit SBOM licenses with intelligent resolution")
+    parser.add_argument("sbom", help="Input SPDX SBOM JSON file")
+    parser.add_argument("policy", help="License policy JSON file")
+    parser.add_argument("--package-policy", help="Package-specific policy JSON file (optional)")
+    parser.add_argument("--internal-dependencies", help="Internal dependencies JSON file (optional)")
+    parser.add_argument("--resolve-licenses", action="store_true", default=True,
+                        help="Enable intelligent license resolution (default: enabled)")
+    parser.add_argument("--no-resolve-licenses", dest="resolve_licenses", action="store_false",
+                        help="Disable intelligent license resolution")
+    parser.add_argument("--generate-summary", action="store_true", 
+                        help="Generate AI-powered compliance summary")
+    parser.add_argument("--output", help="Output JSON file (optional)")
+    parser.add_argument("--debug", action="store_true", help="Enable debug logging")
+
     args = parser.parse_args()
 
-    audit_licenses(args.sbom_path, args.policy_path, args.package_policy_path, args.debug, args.markdown, args.openai_api_key, args.internal_dependency_pattern, args.ai_provider, args.azure_endpoint, args.azure_deployment, args.aws_region, args.ai_model_name)
+    # Configure logging
+    log_level = logging.DEBUG if args.debug else logging.INFO
+    logging.basicConfig(level=log_level, format='%(asctime)s - %(levelname)s - %(message)s', force=True)
+
+    # Run audit
+    results = audit_licenses_with_resolution(
+        args.sbom, args.policy, args.package_policy, 
+        args.internal_dependencies, args.resolve_licenses,
+        args.generate_summary
+    )
+
+    # Save output if requested
+    if args.output:
+        with open(args.output, 'w') as f:
+            json.dump(results, f, indent=2)
+        print(f"💾 Results saved to {args.output}")
+    else:
+        # Print detailed results to stdout
+        print(f"\n📋 Detailed Results:")
+        print(json.dumps(results, indent=2))
