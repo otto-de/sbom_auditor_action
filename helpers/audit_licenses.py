@@ -240,7 +240,10 @@ def audit_component_with_resolution(component, license_policies, package_policie
 
 def audit_licenses_with_resolution(sbom_path, policy_path, package_policy_path=None, 
                                   internal_dependencies_file=None, resolve_licenses=True, 
-                                  generate_ai_summary_flag=False):
+                                  generate_ai_summary_flag=False, openai_api_key=None, 
+                                  ai_provider="openai", azure_endpoint=None, 
+                                  azure_deployment=None, aws_region=None, 
+                                  ai_model_name=None, internal_dependency_patterns=None):
     """
     Main function to audit licenses with intelligent resolution.
     
@@ -267,16 +270,21 @@ def audit_licenses_with_resolution(sbom_path, policy_path, package_policy_path=N
         package_policy_data = load_json_file(package_policy_path, "Package Policy")
         package_policies = package_policy_data.get('packages', [])
     
-    internal_dependency_patterns = []
+    # Handle internal dependency patterns
+    internal_dependency_patterns_list = []
     if internal_dependencies_file:
         internal_deps_data = load_json_file(internal_dependencies_file, "Internal Dependencies")
-        internal_dependency_patterns = internal_deps_data.get('patterns', [])
+        internal_dependency_patterns_list = internal_deps_data.get('patterns', [])
+    elif internal_dependency_patterns:
+        # Parse newline-separated patterns from string
+        internal_dependency_patterns_list = [p.strip() for p in internal_dependency_patterns.split('\n') if p.strip()]
 
     # Initialize license resolver if enabled
     license_resolver = None
     if resolve_licenses:
-        ai_api_key = os.getenv('GITHUB_TOKEN')  # Use GitHub token for GitHub Models
-        license_resolver = LicenseResolver(api_key=ai_api_key, ai_provider='github')
+        # Use the provided API key or fallback to environment
+        api_key = openai_api_key or os.getenv('GITHUB_TOKEN') if ai_provider == 'github' else openai_api_key
+        license_resolver = LicenseResolver(api_key=api_key, ai_provider=ai_provider)
         logging.info("✨ Intelligent license resolution enabled")
     
     # Handle nested SBOM structure
@@ -292,7 +300,7 @@ def audit_licenses_with_resolution(sbom_path, policy_path, package_policy_path=N
     for component in components:
         audit_results = audit_component_with_resolution(
             component, license_policies, package_policies, 
-            license_resolver, internal_dependency_patterns
+            license_resolver, internal_dependency_patterns_list
         )
         all_audit_results.extend(audit_results)
         
@@ -372,7 +380,20 @@ def audit_licenses_with_resolution(sbom_path, policy_path, package_policy_path=N
                 "allowed": allowed,
                 "internal": internal
             }
-            ai_summary = generate_summary(summary_data)
+            
+            # Use provided API key or fallback
+            api_key = openai_api_key or os.getenv('GITHUB_TOKEN') if ai_provider == 'github' else openai_api_key
+            
+            ai_summary = generate_summary(
+                api_key, 
+                denied, 
+                needs_review, 
+                ai_provider, 
+                azure_endpoint, 
+                azure_deployment, 
+                aws_region, 
+                ai_model_name
+            )
             logging.info(f"✅ AI summary generated successfully")
         except Exception as e:
             logging.error(f"Failed to generate AI summary: {e}")
@@ -463,6 +484,20 @@ if __name__ == "__main__":
                         help="Generate AI-powered compliance summary")
     parser.add_argument("--markdown", action="store_true", 
                         help="Output the report as a Markdown table")
+    parser.add_argument("--openai-api-key", 
+                        help="OpenAI API key for AI-powered summary generation")
+    parser.add_argument("--ai-provider", default="openai",
+                        help="AI provider (openai, azure, bedrock, github)")
+    parser.add_argument("--azure-endpoint",
+                        help="Azure OpenAI endpoint URL")
+    parser.add_argument("--azure-deployment", 
+                        help="Azure OpenAI deployment name")
+    parser.add_argument("--aws-region",
+                        help="AWS region for Bedrock")
+    parser.add_argument("--ai-model-name",
+                        help="Specific AI model name to use")
+    parser.add_argument("--internal-dependency-pattern",
+                        help="Regex patterns for internal dependencies (newline-separated)")
     parser.add_argument("--output", help="Output JSON file (optional)")
     parser.add_argument("--debug", action="store_true", help="Enable debug logging")
 
@@ -476,7 +511,10 @@ if __name__ == "__main__":
     results = audit_licenses_with_resolution(
         args.sbom, args.policy, args.package_policy, 
         args.internal_dependencies, args.resolve_licenses,
-        args.generate_summary
+        args.generate_summary, args.openai_api_key,
+        args.ai_provider, args.azure_endpoint, 
+        args.azure_deployment, args.aws_region, 
+        args.ai_model_name, args.internal_dependency_pattern
     )
 
     # Determine if we need to force markdown output

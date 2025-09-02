@@ -151,7 +151,7 @@ runs:
         # Construct the package policy argument, but only if the file actually exists
         PACKAGE_POLICY_ARG=""
         if [[ -f "$PACKAGE_POLICY_FILE" ]]; then
-          PACKAGE_POLICY_ARG="--package-policy-path $PACKAGE_POLICY_FILE"
+          PACKAGE_POLICY_ARG="--package-policy $PACKAGE_POLICY_FILE"
         else
           echo "Info: No package policy file found at '$PACKAGE_POLICY_FILE'. Continuing without package-specific policies."
         fi
