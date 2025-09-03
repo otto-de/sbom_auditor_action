@@ -14,6 +14,12 @@
 - **FIXED**: Resolved `--cache-ttl-hours: expected one argument` error
 - **FIXED**: Action now works properly in all workflows
 
+### Multiline Pattern Handling
+- **FIXED**: Multiline YAML internal dependency patterns now work correctly
+- **FIXED**: Resolved `unrecognized arguments: com\.otto\..* pkg:maven/de\.otto\..*` error  
+- **SOLUTION**: Uses environment variable for proper multiline pattern handling
+- **TESTED**: All pattern configurations validated in GitHub Actions
+
 ### Regex Pattern Corrections
 - **FIXED**: Corrected regex patterns in documentation (proper escaping)
 - **EXAMPLE**: `de\.otto\..*` instead of incorrect `de.otto.*`
