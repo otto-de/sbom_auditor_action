@@ -230,9 +230,10 @@ To skip internal dependencies from the audit, you can use the `internal_dependen
   with:
     github_token: ${{ secrets.GITHUB_TOKEN }}
     internal_dependency_pattern: |
-      com.my-company.*
-      org.my-company.*
-      pkg:maven/com.my-company.*
+      com\.my-company\..*
+      org\.my-company\..*
+      pkg:maven/com\.my-company\..*
+      pkg:npm/@my-company/.*
       pkg:npm/my-company/*
 ```
 
