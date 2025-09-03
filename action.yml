@@ -40,6 +40,18 @@ inputs:
     description: 'A newline-separated list of regex patterns to identify internal dependencies that should be skipped from the audit.'
     required: false
     default: ''
+  enable_cache:
+    description: 'Enable caching for SBOM enrichment to speed up subsequent runs.'
+    required: false
+    default: 'true'
+  cache_ttl_hours:
+    description: 'Cache time-to-live in hours for package data (default: 168 = 7 days).'
+    required: false
+    default: '168'
+  debug:
+    description: 'Enable debug logging for detailed troubleshooting output.'
+    required: false
+    default: 'false'
 
 outputs:
   audit_exit_code:
