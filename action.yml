@@ -48,6 +48,10 @@ inputs:
     description: 'Cache time-to-live in hours for package data (default: 168 = 7 days).'
     required: false
     default: '168'
+  debug:
+    description: 'Enable debug logging for detailed troubleshooting output.'
+    required: false
+    default: 'false'
 
 outputs:
   audit_exit_code:
@@ -112,12 +116,15 @@ runs:
         # Enable debug logging for troubleshooting
         export PYTHONPATH="${{ github.action_path }}/helpers:$PYTHONPATH"
         
+        DEBUG_ARG=""
+        if [[ "${{ inputs.debug }}" == "true" ]]; then
+          DEBUG_ARG="--debug"
+        fi
+        
         if [ "${{ inputs.enable_cache }}" = "true" ]; then
-          python -c "import logging; logging.basicConfig(level=logging.DEBUG)" && \
-          python ${{ github.action_path }}/helpers/enrich_sbom.py sbom.json sbom_enriched.json --cache-ttl-hours ${{ inputs.cache_ttl_hours }} --debug
+          python ${{ github.action_path }}/helpers/enrich_sbom.py sbom.json sbom_enriched.json --cache-ttl-hours ${{ inputs.cache_ttl_hours }} $DEBUG_ARG
         else
-          python -c "import logging; logging.basicConfig(level=logging.DEBUG)" && \
-          python ${{ github.action_path }}/helpers/enrich_sbom.py sbom.json sbom_enriched.json --cache-ttl-hours 0 --debug
+          python ${{ github.action_path }}/helpers/enrich_sbom.py sbom.json sbom_enriched.json --cache-ttl-hours 0 $DEBUG_ARG
         fi
       env:
         OPENAI_API_KEY: ${{ inputs.openai_api_key }}
@@ -190,7 +197,13 @@ runs:
           INTERNAL_DEPENDENCY_PATTERN_ARG="--internal-dependency-pattern ${{ inputs.internal_dependency_pattern }}"
         fi
 
-        python ${{ github.action_path }}/helpers/audit_licenses.py sbom_enriched.json $POLICY_FILE --markdown --debug $PACKAGE_POLICY_ARG $OPENAI_ARG $AI_PROVIDER_ARGS $INTERNAL_DEPENDENCY_PATTERN_ARG --generate-summary > license-audit-report.md || AUDIT_EXIT_CODE=$?
+        # Construct debug argument
+        DEBUG_ARG=""
+        if [[ "${{ inputs.debug }}" == "true" ]]; then
+          DEBUG_ARG="--debug"
+        fi
+
+        python ${{ github.action_path }}/helpers/audit_licenses.py sbom_enriched.json $POLICY_FILE --markdown $DEBUG_ARG $PACKAGE_POLICY_ARG $OPENAI_ARG $AI_PROVIDER_ARGS $INTERNAL_DEPENDENCY_PATTERN_ARG --generate-summary > license-audit-report.md || AUDIT_EXIT_CODE=$?
         
         # The audit script now writes directly to GITHUB_STEP_SUMMARY
         cat license-audit-report.md >> $GITHUB_STEP_SUMMARY

@@ -18,8 +18,7 @@ from ai_summary import generate_summary
 from license_resolver import LicenseResolver
 from spdx_expression_parser import SPDXExpressionParser
 
-# Configure logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+# Logging will be configured in main() based on debug flag
 
 
 def load_json_file(file_path, file_type):
@@ -146,7 +145,7 @@ def audit_component_with_resolution(component, license_policies, package_policie
         for pattern in internal_dependency_patterns:
             # Check both PURL and component name
             if (purl and re.match(pattern, purl)) or (component_name and re.match(pattern, component_name)):
-                logging.info(f"  Skipping internal dependency: {purl or component_name} (matches pattern: '{pattern}')")
+                logging.debug(f"  Skipping internal dependency: {purl or component_name} (matches pattern: '{pattern}')")
                 return [{"package": f"{component_name}@{component_version}", "purl": purl, "policy": "internal"}]
     
     logging.debug(f"Processing component: {component_name}@{component_version} ({purl})")
@@ -157,7 +156,7 @@ def audit_component_with_resolution(component, license_policies, package_policie
     if package_policy:
         policy = package_policy.get('usagePolicy')
         reason = package_policy.get('reason', 'N/A')
-        logging.info(f"  PACKAGE POLICY OVERRIDE: {purl} -> {policy} (reason: {reason})")
+        logging.debug(f"  PACKAGE POLICY OVERRIDE: {purl} -> {policy} (reason: {reason})")
         return [{
             "package": f"{component_name}@{component_version}",
             "purl": purl,
@@ -169,7 +168,7 @@ def audit_component_with_resolution(component, license_policies, package_policie
     if not license_concluded or license_concluded in ['NOASSERTION', 'NONE']:
         policy = "needs-review"
         if purl.startswith('pkg:githubactions/'):
-            logging.info(f"  GitHub Action {component_name}@{component_version} has no license, but is allowed.")
+            logging.debug(f"  GitHub Action {component_name}@{component_version} has no license, but is allowed.")
             policy = "allow"
         else:
             logging.warning(f"  No license found for {component_name}@{component_version}. Marking for review.")
@@ -193,7 +192,7 @@ def audit_component_with_resolution(component, license_policies, package_policie
     )
     
     if needs_resolution and license_resolver:
-        logging.info(f"🔍 Attempting to resolve unknown license: '{license_concluded}'")
+        logging.debug(f"🔍 Attempting to resolve unknown license: '{license_concluded}'")
         
         # Try to get the original license name from enrichment metadata
         original_license_name = license_concluded
@@ -215,7 +214,7 @@ def audit_component_with_resolution(component, license_policies, package_policie
                 'confidence': resolution_result['confidence']
             }
             
-            logging.info(f"✅ Resolved '{original_license_name}' → '{resolved_license}' "
+            logging.debug(f"✅ Resolved '{original_license_name}' → '{resolved_license}' "
                         f"({resolution_result['method']})")
             
             # Update component with resolution info
@@ -300,13 +299,17 @@ def audit_licenses_with_resolution(sbom_path, policy_path, package_policy_path=N
         # Use the provided API key or fallback to environment
         api_key = openai_api_key or os.getenv('GITHUB_TOKEN') if ai_provider == 'github' else openai_api_key
         license_resolver = LicenseResolver(api_key=api_key, ai_provider=ai_provider)
-        logging.info("✨ Intelligent license resolution enabled")
+        logging.debug("✨ Intelligent license resolution enabled")
     
     # Handle nested SBOM structure
     sbom_content = sbom_data.get("sbom", sbom_data)
     components = extract_components(sbom_content)
     
     logging.info(f"Starting audit of {len(components)} components...")
+    
+    # Add summary info for non-debug mode
+    if not logging.getLogger().isEnabledFor(logging.DEBUG):
+        logging.info("🔍 License resolution enabled - processing packages...")
     
     # Audit components
     all_audit_results = []
@@ -327,9 +330,9 @@ def audit_licenses_with_resolution(sbom_path, policy_path, package_policy_path=N
 
     # Print resolution statistics
     if resolution_stats:
-        logging.info("📊 License resolution statistics:")
+        logging.debug("📊 License resolution statistics:")
         for method, count in sorted(resolution_stats.items()):
-            logging.info(f"   {method}: {count}")
+            logging.debug(f"   {method}: {count}")
 
     # Generate compliance report
     policy_counts = {}
