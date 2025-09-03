@@ -158,14 +158,10 @@ def audit_component_with_resolution(component, license_policies, package_policie
     license_concluded = component.get('licenseConcluded')
 
     # Check if the component matches any of the internal dependency patterns
-    # Default internal patterns if none provided
+    # No default internal patterns - must be explicitly configured
     if not internal_dependency_patterns:
-        internal_dependency_patterns = [
-            r'.*de\.otto\..*',      # Otto internal packages
-            r'.*com\.otto\..*',     # Otto internal packages alternative
-            r'pkg:maven/de\.otto\..*',  # Maven Otto packages
-            r'pkg:maven/com\.otto\..*', # Maven Otto packages alternative
-        ]
+        # No internal patterns configured - all packages will be audited
+        pass
     
     if internal_dependency_patterns:
         for pattern in internal_dependency_patterns:

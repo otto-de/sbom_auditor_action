@@ -63,7 +63,7 @@ To use this action in your workflow, add the following step:
 | `ai_model_name`       | Specific AI model name to use (optional, provider-specific defaults will be used).                         | `false`  | `''`                                                     |
 | `package_policy_path` | Path to an optional package policy JSON file. If not provided, the action looks for a file named `package_policy.json` in the `helpers` directory of the action itself. | `false`  | `''`                                                     |
 | `policy_path`         | Path to an optional license policy JSON file. If not provided, the action uses the `policy.json` file included with the action. | `false`  | `''`                                                     |
-| `internal_dependency_pattern` | A newline-separated list of regex patterns to identify internal dependencies that should be skipped from the audit. | `false`  | `'de.otto.*'`                                            |
+| `internal_dependency_pattern` | A newline-separated list of regex patterns to identify internal dependencies that should be skipped from the audit. | `false`  | `''` (no internal patterns by default)                  |
 | `enable_cache`        | Enable caching for SBOM enrichment to speed up subsequent runs (recommended for organizations).                  | `false`  | `'true'`                                                 |
 | `cache_ttl_hours`     | Cache time-to-live in hours for package data (default: 168 = 7 days).                                          | `false`  | `'168'`                                                  |
 
@@ -231,7 +231,9 @@ To skip internal dependencies from the audit, you can use the `internal_dependen
     github_token: ${{ secrets.GITHUB_TOKEN }}
     internal_dependency_pattern: |
       com.my-company.*
-      de.my-other-company.*
+      org.my-company.*
+      pkg:maven/com.my-company.*
+      pkg:npm/my-company/*
 ```
 
 

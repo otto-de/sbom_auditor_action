@@ -39,7 +39,7 @@ inputs:
   internal_dependency_pattern:
     description: 'A newline-separated list of regex patterns to identify internal dependencies that should be skipped from the audit.'
     required: false
-    default: 'de.otto.*'
+    default: ''
   enable_cache:
     description: 'Enable caching for SBOM enrichment to speed up subsequent runs.'
     required: false
