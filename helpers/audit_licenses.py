@@ -79,7 +79,7 @@ def find_license_policy(license_id, license_policies):
     return policy
 
 
-def generate_summary_table(total_packages, internal_packages, gh_actions_count, denied_count, needs_review_count, resolved_count=0):
+def generate_summary_table(total_packages, internal_packages, gh_actions_count, denied_count, needs_review_count, resolved_count=0, resolution_stats=None):
     """Generates a summary table and appends it to the GITHUB_STEP_SUMMARY file."""
     summary_file = os.environ.get('GITHUB_STEP_SUMMARY')
     if not summary_file:
@@ -102,6 +102,32 @@ def generate_summary_table(total_packages, internal_packages, gh_actions_count, 
 | Licenses Resolved | {resolved_count} |"""
 
     summary_content += "\n\n"
+
+    # Add License Resolution Statistics if available
+    if resolution_stats and any(count > 0 for count in resolution_stats.values()):
+        summary_content += """
+### 🔧 License Resolution Statistics
+
+| Resolution Method | Count | Description |
+| :--- | :---: | :--- |"""
+
+        # Resolution method descriptions
+        method_descriptions = {
+            'deps.dev': '🌐 Google deps.dev API',
+            'spdx_fuzzy': '🎯 SPDX Fuzzy Matching', 
+            'ai_assisted': '🤖 AI-Powered Resolution',
+            'pom_fallback': '📄 Maven POM Analysis',
+            'cache_hit': '💾 Cached Resolution',
+            'expression_parser': '🧠 SPDX Expression Parser'
+        }
+        
+        for method, count in sorted(resolution_stats.items()):
+            if count > 0:
+                description = method_descriptions.get(method, f'📋 {method.replace("_", " ").title()}')
+                summary_content += f"""
+| {description} | {count} | Advanced license resolution |"""
+        
+        summary_content += "\n\n"
 
     try:
         with open(summary_file, 'a', encoding='utf-8') as f:
@@ -314,6 +340,14 @@ def audit_licenses_with_resolution(sbom_path, policy_path, package_policy_path=N
     # Audit components
     all_audit_results = []
     resolution_stats = {}
+    enrichment_stats = {}
+    
+    # First, collect enrichment statistics from SBOM
+    for component in components:
+        if 'enrichment' in component and 'licenseResolutions' in component['enrichment']:
+            for resolution in component['enrichment']['licenseResolutions']:
+                method = resolution.get('method', 'unknown')
+                enrichment_stats[method] = enrichment_stats.get(method, 0) + 1
     
     for component in components:
         audit_results = audit_component_with_resolution(
@@ -322,16 +356,22 @@ def audit_licenses_with_resolution(sbom_path, policy_path, package_policy_path=N
         )
         all_audit_results.extend(audit_results)
         
-        # Track resolution statistics
+        # Track resolution statistics from audit phase
         for result in audit_results:
             if 'resolution' in result:
                 method = result['resolution']['method']
                 resolution_stats[method] = resolution_stats.get(method, 0) + 1
+    
+    # Combine enrichment and audit resolution statistics
+    combined_stats = enrichment_stats.copy()
+    for method, count in resolution_stats.items():
+        combined_stats[method] = combined_stats.get(method, 0) + count
 
     # Print resolution statistics
-    if resolution_stats:
-        logging.debug("📊 License resolution statistics:")
-        for method, count in sorted(resolution_stats.items()):
+    if combined_stats:
+        logging.debug("📊 Combined license resolution statistics:")
+        for method, count in sorted(combined_stats.items()):
+            logging.debug(f"   {method}: {count}")
             logging.debug(f"   {method}: {count}")
 
     # Generate compliance report
@@ -362,14 +402,15 @@ def audit_licenses_with_resolution(sbom_path, policy_path, package_policy_path=N
                 gh_actions_count += 1
 
     # Generate GitHub Step Summary
-    total_resolved = sum(resolution_stats.values()) if resolution_stats else 0
+    total_resolved = sum(combined_stats.values()) if combined_stats else 0
     generate_summary_table(
         len(all_audit_results), 
         len(internal), 
         gh_actions_count, 
         len(denied), 
         len(needs_review),
-        total_resolved
+        total_resolved,
+        combined_stats
     )
 
     # Print summary

@@ -209,14 +209,23 @@ runs:
         cat license-audit-report.md >> $GITHUB_STEP_SUMMARY
         echo "AUDIT_EXIT_CODE=${AUDIT_EXIT_CODE}" >> $GITHUB_OUTPUT
 
+    - name: Upload SBOM artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: sbom-enriched
+        path: sbom_enriched.json
+        compression-level: 6
+        retention-days: 30
+        
     - name: Upload license artifacts
       uses: actions/upload-artifact@v4
       with:
         name: license-artifacts
         path: |
-          sbom_enriched.json
           LICENSES.md
           license-audit-report.md
+        compression-level: 6
+        retention-days: 30
       
     - name: Check audit result
       if: steps.audit_licenses.outputs.AUDIT_EXIT_CODE != '0' && inputs.fail_hard == 'true'
