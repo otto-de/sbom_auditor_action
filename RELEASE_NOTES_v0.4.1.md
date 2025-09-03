@@ -47,9 +47,18 @@
     internal_dependency_pattern: |
       de\.otto\..*
       com\.otto\..*
+      com\.github\.otto-ec.*
       pkg:maven/de\.otto\..*
       pkg:maven/com\.otto\..*
+      pkg:github/otto-ec/.*
+      pkg:github/otto-de/.*
 ```
+
+> **💡 Pattern Troubleshooting:**
+> - `com.github.otto-ec/package` → Use `com\.github\.otto-ec.*` (no `\.` after otto-ec)
+> - `pkg:github/otto-ec/repo` → Use `pkg:github/otto-ec/.*`
+> - Remember: `\.` escapes dots, `.*` matches any characters
+> - Test patterns with your specific package names!
 
 **For other organizations:** Configure your own patterns:
 

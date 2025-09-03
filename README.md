@@ -256,8 +256,11 @@ To skip internal dependencies from the audit, you can use the `internal_dependen
     internal_dependency_pattern: |
       de\.otto\..*
       com\.otto\..*
+      com\.github\.otto-ec.*
       pkg:maven/de\.otto\..*
       pkg:maven/com\.otto\..*
+      pkg:github/otto-ec/.*
+      pkg:github/otto-de/.*
     enable_cache: true
     cache_ttl_hours: 168
     fail_hard: true
