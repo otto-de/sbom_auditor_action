@@ -557,6 +557,10 @@ if __name__ == "__main__":
     parser.add_argument("--debug", action="store_true", help="Enable debug logging")
 
     args = parser.parse_args()
+    
+    # Check for internal patterns from environment variable if not provided as argument
+    if not args.internal_dependency_pattern:
+        args.internal_dependency_pattern = os.environ.get('INTERNAL_PATTERNS')
 
     # Configure logging
     log_level = logging.DEBUG if args.debug else logging.INFO

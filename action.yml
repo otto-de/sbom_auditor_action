@@ -191,10 +191,9 @@ runs:
           AI_PROVIDER_ARGS="$AI_PROVIDER_ARGS --ai-model-name ${{ inputs.ai_model_name }}"
         fi
 
-        # Construct the internal dependency pattern argument
-        INTERNAL_DEPENDENCY_PATTERN_ARG=""
+        # Set internal dependency patterns as environment variable if provided
         if [[ -n "${{ inputs.internal_dependency_pattern }}" ]]; then
-          INTERNAL_DEPENDENCY_PATTERN_ARG="--internal-dependency-pattern ${{ inputs.internal_dependency_pattern }}"
+          export INTERNAL_PATTERNS="${{ inputs.internal_dependency_pattern }}"
         fi
 
         # Construct debug argument
@@ -203,7 +202,7 @@ runs:
           DEBUG_ARG="--debug"
         fi
 
-        python ${{ github.action_path }}/helpers/audit_licenses.py sbom_enriched.json $POLICY_FILE --markdown $DEBUG_ARG $PACKAGE_POLICY_ARG $OPENAI_ARG $AI_PROVIDER_ARGS $INTERNAL_DEPENDENCY_PATTERN_ARG --generate-summary > license-audit-report.md || AUDIT_EXIT_CODE=$?
+        eval "python ${{ github.action_path }}/helpers/audit_licenses.py sbom_enriched.json $POLICY_FILE --markdown $DEBUG_ARG $PACKAGE_POLICY_ARG $OPENAI_ARG $AI_PROVIDER_ARGS --generate-summary" > license-audit-report.md || AUDIT_EXIT_CODE=$?
         
         # The audit script now writes directly to GITHUB_STEP_SUMMARY
         cat license-audit-report.md >> $GITHUB_STEP_SUMMARY
