@@ -7,6 +7,18 @@
 - **NEW**: Users must now explicitly configure their internal dependency patterns
 - **BENEFIT**: Action is now truly organization-neutral and reusable
 
+## 🐛 Critical Fixes
+
+### Missing Input Definitions
+- **FIXED**: Added missing `enable_cache`, `cache_ttl_hours`, and `debug` input definitions
+- **FIXED**: Resolved `--cache-ttl-hours: expected one argument` error
+- **FIXED**: Action now works properly in all workflows
+
+### Regex Pattern Corrections
+- **FIXED**: Corrected regex patterns in documentation (proper escaping)
+- **EXAMPLE**: `de\.otto\..*` instead of incorrect `de.otto.*`
+- **TESTED**: All patterns validated and working correctly
+
 ## 🔧 Key Changes
 
 ### Action Configuration
