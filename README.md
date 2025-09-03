@@ -71,6 +71,10 @@ To use this action in your workflow, add the following step:
 - `azure_endpoint` and `azure_deployment` are required when `ai_provider` is `'azure'`
 - `aws_region` is required when `ai_provider` is `'bedrock'`
 
+**⚠️ Important:** Input names use **underscores** (`_`), not hyphens (`-`). 
+- ✅ Correct: `cache_ttl_hours`, `enable_cache`, `internal_dependency_pattern`
+- ❌ Wrong: `cache-ttl-hours`, `enable-cache`, `internal-dependency-pattern`
+
 ## Outputs
 
 | Name                     | Description                                                              |
@@ -192,10 +196,13 @@ jobs:
 
       - name: Run SBOM Auditor
         id: sbom-audit
-        uses: otto-de/sbom_auditor_action@v1
+        uses: otto-de/sbom_auditor_action@v0.4.1
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           fail_hard: true
+          enable_cache: true
+          cache_ttl_hours: 168
+          debug: false
 
       - name: Upload Audit Artifacts
         uses: actions/upload-artifact@v4
@@ -226,7 +233,7 @@ To skip internal dependencies from the audit, you can use the `internal_dependen
 
 ```yaml
 - name: Run SBOM Auditor and Skip Internal Dependencies
-  uses: otto-de/sbom_auditor_action@v1
+  uses: otto-de/sbom_auditor_action@v0.4.1
   with:
     github_token: ${{ secrets.GITHUB_TOKEN }}
     internal_dependency_pattern: |
@@ -234,7 +241,26 @@ To skip internal dependencies from the audit, you can use the `internal_dependen
       org\.my-company\..*
       pkg:maven/com\.my-company\..*
       pkg:npm/@my-company/.*
-      pkg:npm/my-company/*
+    enable_cache: true
+    cache_ttl_hours: 168
+    debug: false
+```
+
+**Example for Otto teams (v0.4.1+):**
+
+```yaml
+- name: Run SBOM Auditor for Otto Project  
+  uses: otto-de/sbom_auditor_action@v0.4.1
+  with:
+    github_token: ${{ secrets.GITHUB_TOKEN }}
+    internal_dependency_pattern: |
+      de\.otto\..*
+      com\.otto\..*
+      pkg:maven/de\.otto\..*
+      pkg:maven/com\.otto\..*
+    enable_cache: true
+    cache_ttl_hours: 168
+    fail_hard: true
 ```
 
 
