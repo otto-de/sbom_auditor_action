@@ -599,3 +599,14 @@ if __name__ == "__main__":
         # Print detailed results to stdout only if not in markdown mode
         print(f"\n📋 Detailed Results:")
         print(json.dumps(results, indent=2))
+
+    # Exit with appropriate status code based on audit results
+    denied = results.get('denied', [])
+    needs_review = results.get('needs_review', [])
+    
+    if denied or needs_review:
+        logging.info("Found packages that are denied or need review. Exiting with status 1.")
+        sys.exit(1)
+    else:
+        logging.info("All packages conform to the license policy.")
+        sys.exit(0)
