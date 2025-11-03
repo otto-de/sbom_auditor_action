@@ -35,6 +35,21 @@ Thumbs.db
 *.tmp
 *.temp
 *.bak
+*.backup
+
+# Generated summaries and test outputs
+*_summary*.md
+enriched_audit_summary.md
+real_sbom_summary*.md
+
+# Large test SBOM files
+*hellfish*.json
+*serviceorder_management*.json
+
+# Policy utility scripts (temporary)
+complete_policy.py
+update_policy.py  
+verify_policy.py
 
 # Python
 *.pyc
