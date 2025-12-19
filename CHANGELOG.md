@@ -21,7 +21,7 @@ All notable changes to this project will be documented in this file.
 - `action.yml` automatically detects and uses default policy as base when custom `policy_path` is provided
 - License expression parsing improved for non-standard formats using `+` operator and `w/` shortcuts
 
-## [Unreleased]
+## [0.4.0] - 2025-07-15
 
 ### Added
 - **Organizational Caching for SBOM Enrichment**: Revolutionary caching system for package metadata
