@@ -2,6 +2,25 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.4.3] - 2025-07-22
+
+### Fixed
+- **Critical Bug: Custom Policy Merge** (Issue #9): Custom `policy_path` now properly extends the default policy instead of completely replacing it. Previously, using a custom policy caused all default allowlisted licenses (Apache-2.0, MIT, etc.) to be flagged as "needs-review".
+
+### Added
+- **Data-Driven License Aliases**: License aliases are now defined in `policy.json` instead of being hardcoded in Python
+  - Added `licenseAliases` section with 95+ mappings for common license name variations
+  - Added `combinedLicenseAliases` section for dual-license expressions (e.g., "CDDL + GPLv2 with classpath exception")
+  - Users can now add custom aliases in their own policy files
+- **Policy Merge Functions**: Added `merge_license_policies()` and `merge_aliases()` functions for intelligent policy combination
+- **New CLI Argument**: Added `--base-policy` argument to explicitly specify base policy for merging
+- **Extended License Coverage**: Added aliases for EDL (Eclipse Distribution License), BSD New License, Public Domain/CC0, and various GPL/CDDL combinations
+
+### Changed
+- `SPDXExpressionParser` now accepts aliases as constructor parameters instead of using hardcoded values
+- `action.yml` automatically detects and uses default policy as base when custom `policy_path` is provided
+- License expression parsing improved for non-standard formats using `+` operator and `w/` shortcuts
+
 ## [Unreleased]
 
 ### Added

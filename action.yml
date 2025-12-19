@@ -202,7 +202,16 @@ runs:
           DEBUG_ARG="--debug"
         fi
 
-        eval "python ${{ github.action_path }}/helpers/audit_licenses.py sbom_enriched.json $POLICY_FILE --markdown $DEBUG_ARG $PACKAGE_POLICY_ARG $OPENAI_ARG $AI_PROVIDER_ARGS --generate-summary" > license-audit-report.md || AUDIT_EXIT_CODE=$?
+        # Construct base policy argument for merging custom policies with default
+        # If user provides a custom policy_path, use the default policy as base for merging
+        BASE_POLICY_ARG=""
+        DEFAULT_POLICY="${{ github.action_path }}/helpers/policy.json"
+        if [[ -n "${{ inputs.policy_path }}" && "$POLICY_FILE" != "$DEFAULT_POLICY" ]]; then
+          BASE_POLICY_ARG="--base-policy $DEFAULT_POLICY"
+          echo "Info: Merging custom policy '$POLICY_FILE' with default policy. Custom entries will override defaults."
+        fi
+
+        eval "python ${{ github.action_path }}/helpers/audit_licenses.py sbom_enriched.json $POLICY_FILE --markdown $DEBUG_ARG $PACKAGE_POLICY_ARG $OPENAI_ARG $AI_PROVIDER_ARGS $BASE_POLICY_ARG --generate-summary" > license-audit-report.md || AUDIT_EXIT_CODE=$?
         
         # The audit script now writes directly to GITHUB_STEP_SUMMARY
         cat license-audit-report.md >> $GITHUB_STEP_SUMMARY

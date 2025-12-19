@@ -37,6 +37,69 @@ def load_json_file(file_path, file_type):
         sys.exit(1)
 
 
+def merge_license_policies(base_policies, override_policies):
+    """
+    Merges two lists of license policies. Override policies take precedence
+    over base policies when they have the same 'id'.
+    
+    Args:
+        base_policies: List of base policy dictionaries (e.g., from default policy.json)
+        override_policies: List of override policy dictionaries (e.g., from custom policy)
+        
+    Returns:
+        List of merged policies where override entries replace base entries with same id
+    """
+    if not override_policies:
+        return base_policies
+    
+    if not base_policies:
+        return override_policies
+    
+    # Create a dict from base policies indexed by id
+    merged = {policy.get('id'): policy for policy in base_policies if policy.get('id')}
+    
+    # Override/add with custom policies
+    override_count = 0
+    new_count = 0
+    for policy in override_policies:
+        policy_id = policy.get('id')
+        if policy_id:
+            if policy_id in merged:
+                override_count += 1
+                logging.debug(f"🔄 Overriding policy for '{policy_id}': {merged[policy_id].get('usagePolicy')} → {policy.get('usagePolicy')}")
+            else:
+                new_count += 1
+                logging.debug(f"➕ Adding new policy for '{policy_id}': {policy.get('usagePolicy')}")
+            merged[policy_id] = policy
+    
+    if override_count > 0 or new_count > 0:
+        logging.info(f"📋 Policy merge: {override_count} overridden, {new_count} new policies added")
+    
+    return list(merged.values())
+
+
+def merge_aliases(base_aliases, override_aliases):
+    """
+    Merges two dictionaries of aliases. Override aliases take precedence.
+    
+    Args:
+        base_aliases: Base alias dictionary (e.g., from default policy.json)
+        override_aliases: Override alias dictionary (e.g., from custom policy)
+        
+    Returns:
+        Merged alias dictionary
+    """
+    if not override_aliases:
+        return base_aliases or {}
+    
+    if not base_aliases:
+        return override_aliases or {}
+    
+    merged = base_aliases.copy()
+    merged.update(override_aliases)
+    return merged
+
+
 def extract_components(sbom_data):
     """Extracts components from SBOM data."""
     components = sbom_data.get('packages', []) or sbom_data.get('components', [])
@@ -67,10 +130,10 @@ def find_package_policy(purl, package_policies):
     return None
 
 
-def find_license_policy(license_id, license_policies):
+def find_license_policy(license_id, license_policies, license_aliases=None, combined_aliases=None):
     """Finds the policy for a given license ID with SPDX expression support."""
-    # Initialize SPDX parser
-    parser = SPDXExpressionParser()
+    # Initialize SPDX parser with aliases from policy
+    parser = SPDXExpressionParser(license_aliases=license_aliases, combined_aliases=combined_aliases)
     
     # Parse and evaluate SPDX expression
     policy, explanation = parser.parse_and_evaluate(license_id, license_policies)
@@ -138,7 +201,8 @@ def generate_summary_table(total_packages, internal_packages, gh_actions_count, 
 
 
 def audit_component_with_resolution(component, license_policies, package_policies, 
-                                   license_resolver=None, internal_dependency_patterns=None):
+                                   license_resolver=None, internal_dependency_patterns=None,
+                                   license_aliases=None, combined_aliases=None):
     """
     Audits a single component with intelligent license resolution.
     
@@ -148,6 +212,8 @@ def audit_component_with_resolution(component, license_policies, package_policie
         package_policies: Package-specific policies
         license_resolver: LicenseResolver instance (optional)
         internal_dependency_patterns: Patterns for internal dependencies
+        license_aliases: Mapping of non-standard license names to SPDX IDs
+        combined_aliases: Mapping of combined license expressions to single license
         
     Returns:
         List of audit results for the component
@@ -210,7 +276,7 @@ def audit_component_with_resolution(component, license_policies, package_policie
     # Check if license needs resolution
     needs_resolution = (
         license_concluded in ['non-standard', 'Weird unknown license'] or
-        find_license_policy(license_concluded, license_policies) is None
+        find_license_policy(license_concluded, license_policies, license_aliases, combined_aliases) is None
     )
     
     if needs_resolution and license_resolver:
@@ -249,7 +315,7 @@ def audit_component_with_resolution(component, license_policies, package_policie
 
     # 4. Check policy for the (potentially resolved) license
     final_license = resolved_license
-    license_policy = find_license_policy(final_license, license_policies)
+    license_policy = find_license_policy(final_license, license_policies, license_aliases, combined_aliases)
     
     if license_policy:
         policy = license_policy
@@ -279,17 +345,19 @@ def audit_licenses_with_resolution(sbom_path, policy_path, package_policy_path=N
                                   generate_ai_summary_flag=False, openai_api_key=None, 
                                   ai_provider="openai", azure_endpoint=None, 
                                   azure_deployment=None, aws_region=None, 
-                                  ai_model_name=None, internal_dependency_patterns=None):
+                                  ai_model_name=None, internal_dependency_patterns=None,
+                                  base_policy_path=None):
     """
     Main function to audit licenses with intelligent resolution.
     
     Args:
         sbom_path: Path to SBOM file
-        policy_path: Path to policy.json
+        policy_path: Path to policy.json (or custom override policy)
         package_policy_path: Path to package policies (optional)
         internal_dependencies_file: Path to internal dependencies file (optional)
         resolve_licenses: Whether to use intelligent license resolution
         generate_ai_summary_flag: Whether to generate AI summary
+        base_policy_path: Path to base/default policy.json (optional, for merging)
         
     Returns:
         Dictionary with audit results
@@ -299,7 +367,31 @@ def audit_licenses_with_resolution(sbom_path, policy_path, package_policy_path=N
     sbom_data = load_json_file(sbom_path, "SBOM")
     policy_data = load_json_file(policy_path, "Policy")
     
-    license_policies = policy_data.get('policies', [])
+    # Handle policy merging: if base_policy_path is provided, merge with custom policy
+    # Also merge aliases from both policies
+    if base_policy_path and base_policy_path != policy_path:
+        base_policy_data = load_json_file(base_policy_path, "Base Policy")
+        base_policies = base_policy_data.get('policies', [])
+        override_policies = policy_data.get('policies', [])
+        license_policies = merge_license_policies(base_policies, override_policies)
+        
+        # Merge license aliases (custom aliases override base aliases)
+        license_aliases = merge_aliases(
+            base_policy_data.get('licenseAliases', {}),
+            policy_data.get('licenseAliases', {})
+        )
+        combined_aliases = merge_aliases(
+            base_policy_data.get('combinedLicenseAliases', {}),
+            policy_data.get('combinedLicenseAliases', {})
+        )
+        logging.info(f"✅ Merged {len(base_policies)} base policies with {len(override_policies)} custom policies → {len(license_policies)} total")
+        logging.debug(f"📋 Loaded {len(license_aliases)} license aliases and {len(combined_aliases)} combined aliases")
+    else:
+        license_policies = policy_data.get('policies', [])
+        license_aliases = policy_data.get('licenseAliases', {})
+        combined_aliases = policy_data.get('combinedLicenseAliases', {})
+        if license_aliases or combined_aliases:
+            logging.debug(f"📋 Loaded {len(license_aliases)} license aliases and {len(combined_aliases)} combined aliases from policy")
     
     package_policies = []
     if package_policy_path:
@@ -348,7 +440,8 @@ def audit_licenses_with_resolution(sbom_path, policy_path, package_policy_path=N
     for component in components:
         audit_results = audit_component_with_resolution(
             component, license_policies, package_policies, 
-            license_resolver, internal_dependency_patterns_list
+            license_resolver, internal_dependency_patterns_list,
+            license_aliases, combined_aliases
         )
         all_audit_results.extend(audit_results)
         
@@ -553,6 +646,8 @@ if __name__ == "__main__":
                         help="Specific AI model name to use")
     parser.add_argument("--internal-dependency-pattern",
                         help="Regex patterns for internal dependencies (newline-separated)")
+    parser.add_argument("--base-policy",
+                        help="Base/default policy file to merge with. Custom policy overrides base policy entries with same id.")
     parser.add_argument("--output", help="Output JSON file (optional)")
     parser.add_argument("--debug", action="store_true", help="Enable debug logging")
 
@@ -573,7 +668,8 @@ if __name__ == "__main__":
         args.generate_summary, args.openai_api_key,
         args.ai_provider, args.azure_endpoint, 
         args.azure_deployment, args.aws_region, 
-        args.ai_model_name, args.internal_dependency_pattern
+        args.ai_model_name, args.internal_dependency_pattern,
+        args.base_policy
     )
 
     # Determine if we need to force markdown output
