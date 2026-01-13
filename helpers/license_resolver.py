@@ -326,7 +326,7 @@ Response format: Just the SPDX ID or "UNKNOWN"."""
                 'confidence': 0.0
             }
         
-        logger.info(f"🔍 Resolving license: '{license_name}'")
+        logger.debug(f"🔍 Resolving license: '{license_name}'")
         
         # Strategy 1: SPDX fuzzy matching
         spdx_match = self._fuzzy_match_spdx(license_name, min_ratio=0.8)

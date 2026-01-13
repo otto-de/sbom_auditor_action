@@ -281,7 +281,7 @@ def enrich_sbom_with_intelligent_resolution(input_sbom_path, output_sbom_path, c
                             
                             if detailed_licenses:
                                 license_data = detailed_licenses
-                                logging.info(f"🔍 Using detailed license info from deps.dev for {package_name}: {detailed_licenses}")
+                                logging.debug(f"🔍 Using detailed license info from deps.dev for {package_name}: {detailed_licenses}")
                     else:
                         # Package response - get from latest version
                         versions = data.get('versions', [])
@@ -310,7 +310,7 @@ def enrich_sbom_with_intelligent_resolution(input_sbom_path, output_sbom_path, c
                                         
                                         if detailed_licenses:
                                             license_data = detailed_licenses
-                                            logging.info(f"🔍 Using detailed license info from deps.dev for {package_name}: {detailed_licenses}")
+                                            logging.debug(f"🔍 Using detailed license info from deps.dev for {package_name}: {detailed_licenses}")
                     
                     # Cache the result
                     cache_manager.cache_package_info(cache_key, {
@@ -364,7 +364,7 @@ def enrich_sbom_with_intelligent_resolution(input_sbom_path, output_sbom_path, c
                             method = resolution_result['method']
                             resolution_stats[method] = resolution_stats.get(method, 0) + 1
                             
-                            logging.info(f"🎯 RESOLVED: '{orig_license}' → '{resolution_result['resolved']}' ({method})")
+                            logging.debug(f"🎯 RESOLVED: '{orig_license}' → '{resolution_result['resolved']}' ({method})")
                             
                             # Add resolution metadata to package
                             if 'enrichment' not in pkg:
@@ -391,7 +391,7 @@ def enrich_sbom_with_intelligent_resolution(input_sbom_path, output_sbom_path, c
                         # Multiple licenses - create SPDX expression
                         pkg["licenseConcluded"] = " AND ".join(resolved_licenses)
                     
-                    logging.info(f"ENRICHED: {package_name} -> {pkg['licenseConcluded']}")
+                    logging.debug(f"ENRICHED: {package_name} -> {pkg['licenseConcluded']}")
                     enriched += 1
                 else:
                     logging.warning(f"NO LICENSE FOUND: {package_name} -> UNKNOWN")
