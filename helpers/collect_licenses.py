@@ -6,34 +6,61 @@ import json
 import requests
 import argparse
 import re
+import os
 from tqdm import tqdm
-
-# Map common or problematic license IDs to the correct SPDX identifier
-LICENSE_ID_MAP = {
-    "LGPL-2.1": "LGPL-2.1-or-later",  # LGPL-2.1 is often ambiguous
-    # Eclipse Distribution License variants
-    "EDL 1.0": "BSD-3-Clause",  # EDL 1.0 is functionally BSD-3-Clause
-    "Eclipse Distribution License - v 1.0": "BSD-3-Clause",
-    "Eclipse Distribution License v. 1.0": "BSD-3-Clause",
-    "Eclipse Distribution License 1.0": "BSD-3-Clause",
-    # CDDL + GPL combinations (common in Java/GlassFish projects)
-    "CDDL + GPLv2": "CDDL-1.1",  # Dual-licensed, use CDDL
-    "CDDL+GPL": "CDDL-1.1",
-    "CDDL + GPLv2 with classpath exception": "CDDL-1.1",
-    "CDDL/GPLv2+CE": "CDDL-1.1",
-    # GPL with Classpath Exception
-    "GPL2 w/ CPE": "GPL-2.0-only WITH Classpath-exception-2.0",
-    "GPLv2 with classpath exception": "GPL-2.0-only WITH Classpath-exception-2.0",
-    "GPL-2.0-with-classpath-exception": "GPL-2.0-only WITH Classpath-exception-2.0",
-    # Public Domain
-    "Public Domain": "CC0-1.0",  # CC0 is the SPDX equivalent
-    "Public domain": "CC0-1.0",
-    "public domain": "CC0-1.0",
-    "UNLICENSED": "Unlicense",
-}
 
 # SPDX expression operators and keywords to filter out
 SPDX_OPERATORS = {'AND', 'OR', 'WITH', 'and', 'or', 'with'}
+
+# Global variables for license aliases (loaded from policy)
+LICENSE_ALIASES = {}
+COMBINED_LICENSE_ALIASES = {}
+
+
+def load_license_aliases(policy_path=None):
+    """Load license aliases from policy file."""
+    global LICENSE_ALIASES, COMBINED_LICENSE_ALIASES
+    
+    # Default policy path
+    if policy_path is None:
+        policy_path = os.path.join(os.path.dirname(__file__), 'policy.json')
+    
+    try:
+        with open(policy_path, 'r') as f:
+            policy = json.load(f)
+        
+        LICENSE_ALIASES = policy.get('licenseAliases', {})
+        COMBINED_LICENSE_ALIASES = policy.get('combinedLicenseAliases', {})
+        
+        # Remove comment entries
+        LICENSE_ALIASES.pop('_comment', None)
+        COMBINED_LICENSE_ALIASES.pop('_comment', None)
+        
+        print(f"Loaded {len(LICENSE_ALIASES)} license aliases and {len(COMBINED_LICENSE_ALIASES)} combined aliases from policy")
+    except Exception as e:
+        print(f"Warning: Could not load license aliases from {policy_path}: {e}")
+        LICENSE_ALIASES = {}
+        COMBINED_LICENSE_ALIASES = {}
+
+
+def normalize_license_id(license_id):
+    """
+    Normalize a license ID using the aliases from policy.
+    Returns the SPDX equivalent or the original if no mapping found.
+    """
+    if not license_id:
+        return license_id
+    
+    # First check combined aliases (for dual-license expressions)
+    lower_id = license_id.lower()
+    if lower_id in COMBINED_LICENSE_ALIASES:
+        return COMBINED_LICENSE_ALIASES[lower_id]
+    
+    # Then check regular aliases
+    if lower_id in LICENSE_ALIASES:
+        return LICENSE_ALIASES[lower_id]
+    
+    return license_id
 
 
 def parse_spdx_expression(expression):
@@ -76,8 +103,8 @@ def get_license_text(license_id):
     if not license_id or license_id.lower() in ["internal", "not found", "non-standard", "noassertion", "none"]:
         return None
     
-    # First, apply the license ID mapping
-    spdx_id = LICENSE_ID_MAP.get(license_id, license_id)
+    # First, apply the license ID mapping from policy
+    spdx_id = normalize_license_id(license_id)
     
     # If the mapped ID is itself an expression (e.g., "GPL-2.0-only WITH Classpath-exception-2.0"),
     # extract the base license (the part before WITH)
@@ -100,8 +127,11 @@ def get_license_text(license_id):
         print(f"Warning: Request or JSON decode failed for {license_id} (tried {fetch_id}): {e}")
         return None
 
-def collect_licenses(sbom_path, output_path):
+def collect_licenses(sbom_path, output_path, policy_path=None):
     """Collects all unique licenses from an SBOM and writes them to a file."""
+    # Load license aliases from policy
+    load_license_aliases(policy_path)
+    
     with open(sbom_path, 'r') as f:
         sbom_data = json.load(f)
 
@@ -175,6 +205,11 @@ if __name__ == "__main__":
         default="LICENSES.md",
         help="Output file for collected license texts (default: LICENSES.md)"
     )
+    parser.add_argument(
+        "--policy",
+        default=None,
+        help="Path to policy.json with licenseAliases (default: helpers/policy.json)"
+    )
     args = parser.parse_args()
 
-    collect_licenses(args.input, args.output)
+    collect_licenses(args.input, args.output, args.policy)

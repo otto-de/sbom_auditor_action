@@ -3981,15 +3981,18 @@
         "cddl 1.1": "CDDL-1.1",
         "common development and distribution license": "CDDL-1.0",
         
-        "edl": "EDL-1.0",
-        "edl 1.0": "EDL-1.0",
-        "edl-1": "EDL-1.0",
-        "edl v1.0": "EDL-1.0",
-        "eclipse distribution license": "EDL-1.0",
-        "eclipse distribution license 1.0": "EDL-1.0",
-        "eclipse distribution license v. 1.0": "EDL-1.0",
-        "eclipse distribution license v1.0": "EDL-1.0",
-        "eclipse distribution license, version 1.0": "EDL-1.0",
+        "edl": "BSD-3-Clause",
+        "edl 1.0": "BSD-3-Clause",
+        "edl-1": "BSD-3-Clause",
+        "edl-1.0": "BSD-3-Clause",
+        "edl v1.0": "BSD-3-Clause",
+        "eclipse distribution license": "BSD-3-Clause",
+        "eclipse distribution license 1.0": "BSD-3-Clause",
+        "eclipse distribution license v. 1.0": "BSD-3-Clause",
+        "eclipse distribution license v1.0": "BSD-3-Clause",
+        "eclipse distribution license, version 1.0": "BSD-3-Clause",
+        "eclipse distribution license - v 1.0": "BSD-3-Clause",
+        "eclipse distribution license - v1.0": "BSD-3-Clause",
         
         "epl": "EPL-2.0",
         "epl 1.0": "EPL-1.0",
@@ -4048,9 +4051,6 @@
         "unlicense": "Unlicense",
         "the unlicense": "Unlicense",
         
-        "eclipse distribution license - v 1.0": "EDL-1.0",
-        "eclipse distribution license - v1.0": "EDL-1.0",
-        
         "bsd new license": "BSD-3-Clause",
         "new bsd": "BSD-3-Clause",
         
@@ -4062,6 +4062,8 @@
     "combinedLicenseAliases": {
         "_comment": "Mapping of combined/dual license expressions to a preferred single license. Keys are lowercase.",
         
+        "cddl + gplv2": "CDDL-1.1",
+        "cddl+gplv2": "CDDL-1.1",
         "cddl + gplv2 with classpath exception": "CDDL-1.1",
         "cddl+gplv2 with classpath exception": "CDDL-1.1",
         "cddl + gpl-2.0 with classpath exception": "CDDL-1.1",
