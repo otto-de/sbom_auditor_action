@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.1] - 2026-01-13
+
+### Fixed
+- **Critical Bug Fix: PURL Matching**: Package policies without version (e.g., `pkg:maven/group/artifact`) now correctly match all versions of that package. Previously, `pkg:maven/jakarta.ws.rs/jakarta.ws.rs-api` would NOT match `pkg:maven/jakarta.ws.rs/jakarta.ws.rs-api@3.1.0`.
+
+### Changed
+- Improved `find_package_policy()` function with smarter version handling:
+  - Policy PURLs without `@version` now match all versions automatically
+  - Policy PURLs with specific version only match that exact version
+  - Wildcards (`*`) continue to work as expected
+
 ## [0.5.0] - 2026-01-13
 
 ### Added

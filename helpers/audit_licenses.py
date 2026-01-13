@@ -164,16 +164,45 @@ def get_purl(component):
 
 
 def find_package_policy(purl, package_policies):
-    """Finds a matching package policy based on PURL and matcher logic."""
+    """Finds a matching package policy based on PURL and matcher logic.
+    
+    Matching rules:
+    - Query parameters (?type=jar) are stripped before matching
+    - If policy PURL has no version (@x.y.z), it matches all versions
+    - Wildcards (*) are supported via fnmatch
+    """
+    # Strip query parameters from SBOM PURL
     normalized_purl = purl.split('?')[0]
 
     for policy in package_policies:
         policy_purl = policy.get('purl', '')
-        normalized_policy_purl = policy_purl.split('?')[0] if policy_purl else ''
-
-        if normalized_policy_purl:
+        if not policy_purl:
+            continue
+            
+        # Strip query parameters from policy PURL
+        normalized_policy_purl = policy_purl.split('?')[0]
+        
+        # Check if policy PURL has a version (contains @)
+        policy_has_version = '@' in normalized_policy_purl
+        
+        if policy_has_version:
+            # Exact match with version (wildcards still supported)
             if fnmatch.fnmatch(normalized_purl, normalized_policy_purl):
                 return policy
+        else:
+            # Policy has no version - should match all versions
+            # Extract base PURL (without version) from SBOM PURL for comparison
+            sbom_base_purl = normalized_purl.split('@')[0]
+            
+            # Match if base PURLs match (with wildcard support)
+            if fnmatch.fnmatch(sbom_base_purl, normalized_policy_purl):
+                return policy
+            
+            # Also try matching the full PURL against policy with implicit wildcard
+            # This handles cases like pkg:maven/group/artifact* matching pkg:maven/group/artifact@1.0
+            if fnmatch.fnmatch(normalized_purl, normalized_policy_purl + '*'):
+                return policy
+    
     return None
 
 

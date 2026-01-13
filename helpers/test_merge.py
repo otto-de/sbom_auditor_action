@@ -47,4 +47,35 @@ for p in merged_packages:
     print(f'  - {p.get("purl")}')
 
 print()
-print('SUCCESS: Merge logic works correctly!')
+print('=== PURL Matching Tests ===')
+from audit_licenses import find_package_policy
+
+test_cases = [
+    ("pkg:maven/jakarta.ws.rs/jakarta.ws.rs-api@3.1.0?type=jar", 
+     "pkg:maven/jakarta.ws.rs/jakarta.ws.rs-api", True),
+    ("pkg:maven/jakarta.ws.rs/jakarta.ws.rs-api@3.1.0", 
+     "pkg:maven/jakarta.ws.rs/jakarta.ws.rs-api", True),
+    ("pkg:maven/jakarta.ws.rs/jakarta.ws.rs-api@2.0.0", 
+     "pkg:maven/jakarta.ws.rs/jakarta.ws.rs-api@3.1.0", False),  # Different version
+    ("pkg:maven/org.jboss/jboss-transaction-spi@1.0.0", 
+     "pkg:maven/org.jboss/*", True),  # Wildcard
+]
+
+all_passed = True
+for sbom_purl, policy_purl, expected in test_cases:
+    policies = [{"purl": policy_purl, "usagePolicy": "allow"}]
+    result = find_package_policy(sbom_purl, policies)
+    matched = result is not None
+    passed = matched == expected
+    all_passed = all_passed and passed
+    status = '✅' if passed else '❌'
+    print(f'{status} SBOM: {sbom_purl}')
+    print(f'   Policy: {policy_purl}')
+    print(f'   Expected: {expected}, Got: {matched}')
+
+print()
+if all_passed:
+    print('SUCCESS: All tests passed!')
+else:
+    print('FAILURE: Some tests failed!')
+    exit(1)
