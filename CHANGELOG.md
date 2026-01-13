@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.2] - 2026-01-13
+
+### Fixed
+- **License Collection for SPDX Expressions**: Combined licenses like `Apache-2.0 AND EPL-1.0` are now properly handled
+  - The expression is parsed and individual licenses (Apache-2.0, EPL-1.0) are fetched separately
+  - Combined expressions are documented in the output file with their component licenses
+  - No more 404 warnings for valid SPDX expressions
+
+### Added
+- `parse_spdx_expression()` function to extract individual licenses from SPDX expressions
+- Combined license expressions section in LICENSES.md output
+
 ## [0.5.1] - 2026-01-13
 
 ### Fixed
