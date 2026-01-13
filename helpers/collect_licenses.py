@@ -11,6 +11,25 @@ from tqdm import tqdm
 # Map common or problematic license IDs to the correct SPDX identifier
 LICENSE_ID_MAP = {
     "LGPL-2.1": "LGPL-2.1-or-later",  # LGPL-2.1 is often ambiguous
+    # Eclipse Distribution License variants
+    "EDL 1.0": "BSD-3-Clause",  # EDL 1.0 is functionally BSD-3-Clause
+    "Eclipse Distribution License - v 1.0": "BSD-3-Clause",
+    "Eclipse Distribution License v. 1.0": "BSD-3-Clause",
+    "Eclipse Distribution License 1.0": "BSD-3-Clause",
+    # CDDL + GPL combinations (common in Java/GlassFish projects)
+    "CDDL + GPLv2": "CDDL-1.1",  # Dual-licensed, use CDDL
+    "CDDL+GPL": "CDDL-1.1",
+    "CDDL + GPLv2 with classpath exception": "CDDL-1.1",
+    "CDDL/GPLv2+CE": "CDDL-1.1",
+    # GPL with Classpath Exception
+    "GPL2 w/ CPE": "GPL-2.0-only WITH Classpath-exception-2.0",
+    "GPLv2 with classpath exception": "GPL-2.0-only WITH Classpath-exception-2.0",
+    "GPL-2.0-with-classpath-exception": "GPL-2.0-only WITH Classpath-exception-2.0",
+    # Public Domain
+    "Public Domain": "CC0-1.0",  # CC0 is the SPDX equivalent
+    "Public domain": "CC0-1.0",
+    "public domain": "CC0-1.0",
+    "UNLICENSED": "Unlicense",
 }
 
 # SPDX expression operators and keywords to filter out
@@ -57,10 +76,17 @@ def get_license_text(license_id):
     if not license_id or license_id.lower() in ["internal", "not found", "non-standard", "noassertion", "none"]:
         return None
     
+    # First, apply the license ID mapping
     spdx_id = LICENSE_ID_MAP.get(license_id, license_id)
     
+    # If the mapped ID is itself an expression (e.g., "GPL-2.0-only WITH Classpath-exception-2.0"),
+    # extract the base license (the part before WITH)
+    fetch_id = spdx_id
+    if ' WITH ' in spdx_id or ' with ' in spdx_id:
+        fetch_id = re.split(r'\s+(?:WITH|with)\s+', spdx_id)[0].strip()
+    
     # Fetch license details from the JSON file for better reliability
-    url = f"https://raw.githubusercontent.com/spdx/license-list-data/main/json/details/{spdx_id}.json"
+    url = f"https://raw.githubusercontent.com/spdx/license-list-data/main/json/details/{fetch_id}.json"
     try:
         response = requests.get(url)
         if response.status_code == 200:
@@ -68,10 +94,10 @@ def get_license_text(license_id):
         else:
             # Only warn if it's not an expression (expressions are handled separately)
             if ' AND ' not in license_id and ' OR ' not in license_id:
-                print(f"Warning: Could not fetch license JSON for {license_id} (tried {spdx_id}) (Status: {response.status_code})")
+                print(f"Warning: Could not fetch license JSON for {license_id} (tried {fetch_id}) (Status: {response.status_code})")
             return None
     except (requests.RequestException, json.JSONDecodeError) as e:
-        print(f"Warning: Request or JSON decode failed for {license_id} (tried {spdx_id}): {e}")
+        print(f"Warning: Request or JSON decode failed for {license_id} (tried {fetch_id}): {e}")
         return None
 
 def collect_licenses(sbom_path, output_path):
