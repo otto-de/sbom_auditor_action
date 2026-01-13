@@ -61,8 +61,9 @@ To use this action in your workflow, add the following step:
 | `azure_deployment`    | Azure OpenAI deployment name (required when `ai_provider` is `azure`).                                     | `false`* | `''`                                                     |
 | `aws_region`          | AWS region for Bedrock (required when `ai_provider` is `bedrock`).                                         | `false`* | `''`                                                     |
 | `ai_model_name`       | Specific AI model name to use (optional, provider-specific defaults will be used).                         | `false`  | `''`                                                     |
-| `package_policy_path` | Path to an optional package policy JSON file. If not provided, the action looks for a file named `package_policy.json` in the `helpers` directory of the action itself. | `false`  | `''`                                                     |
-| `policy_path`         | Path to an optional license policy JSON file. If not provided, the action uses the `policy.json` file included with the action. | `false`  | `''`                                                     |
+| `policy_path`         | Path to a custom policy JSON file. Can contain `policies` (license rules) and/or `packagePolicies` (PURL-based exceptions). By default merged with the built-in policy. | `false`  | `''`                                                     |
+| `policy_mode`         | How to handle custom policies: `merge` (default) combines with built-in policies, `replace` uses only the custom policy. | `false`  | `'merge'`                                                |
+| `package_policy_path` | ⚠️ **Deprecated**: Use `policy_path` with `packagePolicies` instead. Path to a separate package policy file. | `false`  | `''`                                                     |
 | `internal_dependency_pattern` | A newline-separated list of regex patterns to identify internal dependencies that should be skipped from the audit. | `false`  | `''` (no internal patterns by default)                  |
 | `enable_cache`        | Enable caching for SBOM enrichment to speed up subsequent runs (recommended for organizations).                  | `false`  | `'true'`                                                 |
 | `cache_ttl_hours`     | Cache time-to-live in hours for package data (default: 168 = 7 days).                                          | `false`  | `'168'`                                                  |
@@ -215,15 +216,125 @@ jobs:
 
 ## Advanced Configuration
 
-### Package-Specific Policies
+### Custom Policies
 
-For cases where the general license-based audit is not sufficient, you can define specific policies for individual packages. This is useful for:
+The action uses a built-in policy that covers common open-source licenses. You can customize this behavior in two ways:
 
-*   Packages that are incorrectly identified as having `NO-LICENSE-FOUND`.
-*   Dependencies with non-standard license agreements.
-*   Internal packages that do not require a license audit.
+#### Option 1: Extend Default Policies (Recommended)
 
-You can create a `package_policy.json` file in your repository and provide the path to it using the `package_policy_path` input. The policy for a package is determined by its Package URL (PURL).
+Create a custom policy file that **adds exceptions** to the default policies. This is the most common use case:
+
+```json
+// .github/license_policy.json
+{
+  "policies": [
+    {"id": "EPL-2.0", "usagePolicy": "allow", "reason": "Approved by legal team"}
+  ],
+  "packagePolicies": [
+    {
+      "purl": "pkg:maven/jakarta.ws.rs/jakarta.ws.rs-api",
+      "usagePolicy": "allow",
+      "reason": "Jakarta API approved - we're not modifying anything"
+    },
+    {
+      "purl": "pkg:maven/org.jboss/*",
+      "usagePolicy": "allow",
+      "reason": "All JBoss packages approved"
+    }
+  ]
+}
+```
+
+```yaml
+- name: Run SBOM Auditor
+  uses: otto-de/sbom_auditor_action@v1
+  with:
+    github_token: ${{ secrets.GITHUB_TOKEN }}
+    policy_path: '.github/license_policy.json'
+    # policy_mode: 'merge'  # Default - merges with built-in policies
+```
+
+#### Option 2: Replace Default Policies Completely
+
+If you want to use **only your own policies** without the built-in defaults:
+
+```yaml
+- name: Run SBOM Auditor
+  uses: otto-de/sbom_auditor_action@v1
+  with:
+    github_token: ${{ secrets.GITHUB_TOKEN }}
+    policy_path: '.github/license_policy.json'
+    policy_mode: 'replace'  # Use ONLY the custom policy
+```
+
+### Policy File Structure
+
+A policy file can contain any combination of these sections:
+
+```json
+{
+  "policies": [
+    {
+      "id": "MIT",
+      "usagePolicy": "allow"
+    },
+    {
+      "id": "GPL-3.0-only",
+      "usagePolicy": "deny",
+      "reason": "Copyleft not allowed"
+    }
+  ],
+  "packagePolicies": [
+    {
+      "purl": "pkg:maven/com.example/my-package",
+      "usagePolicy": "allow",
+      "reason": "Specific package exception"
+    }
+  ],
+  "licenseAliases": {
+    "The MIT License": "MIT",
+    "Apache 2.0": "Apache-2.0"
+  }
+}
+```
+
+| Section | Purpose |
+|---------|----------|
+| `policies` | License-based rules (by SPDX ID) |
+| `packagePolicies` | PURL-based exceptions for specific packages |
+| `licenseAliases` | Map non-standard license names to SPDX IDs |
+
+### Package Policies (PURL-based Exceptions)
+
+Package policies allow you to override the license-based audit for specific packages. This is useful for:
+
+*   Packages incorrectly identified as having `NO-LICENSE-FOUND`
+*   Dependencies with non-standard license agreements approved by your legal team
+*   Internal packages that don't require license auditing
+
+#### PURL Matching with Wildcards
+
+The action uses `fnmatch` for PURL matching, supporting `*` and `?` wildcards:
+
+```json
+{
+  "packagePolicies": [
+    // Exact package (all versions - version in PURL is ignored)
+    {"purl": "pkg:maven/jakarta.ws.rs/jakarta.ws.rs-api", "usagePolicy": "allow"},
+    
+    // All packages in a group
+    {"purl": "pkg:maven/org.jboss/*", "usagePolicy": "allow"},
+    
+    // All jakarta APIs
+    {"purl": "pkg:maven/jakarta.*/jakarta.*-api", "usagePolicy": "allow"},
+    
+    // Specific npm scope
+    {"purl": "pkg:npm/@mycompany/*", "usagePolicy": "allow"}
+  ]
+}
+```
+
+> **Note:** Query parameters (e.g., `?type=jar`) are automatically stripped before matching, so `pkg:maven/group/artifact` matches `pkg:maven/group/artifact@1.0.0?type=jar`.
 
 ### Skipping Internal Dependencies
 
@@ -264,56 +375,6 @@ To skip internal dependencies from the audit, you can use the `internal_dependen
     enable_cache: true
     cache_ttl_hours: 168
     fail_hard: true
-```
-
-
-#### PURL Matching
-
-To provide maximum flexibility, the action supports different matching strategies for PURLs. The matching logic automatically **normalizes** PURLs by removing any qualifiers (e.g., `?type=jar`, `?os=windows`) before comparison, which significantly improves reliability.
-
-You can specify the matching strategy using the `matcher` field in your policy rule. If omitted, it defaults to `exact`.
-
-| Matcher          | Description                                                                                                |
-| ---------------- | ---------------------------------------------------------------------------------------------------------- |
-| `exact`          | (Default) The PURL from the SBOM must exactly match the PURL in the policy (after normalization).          |
-| `all-versions`   | Matches the package regardless of its version. The version part of the PURL is ignored during comparison.    |
-| `wildcard`       | Allows the use of `*` as a wildcard in the policy PURL. Useful for matching groups of related packages. |
-
-**Example `package_policy.json` with Matchers:**
-
-```json
-{
-  "packagePolicies": [
-    {
-      "purl": "pkg:npm/react",
-      "matcher": "all-versions",
-      "usagePolicy": "allow",
-      "reason": "All versions of React are approved."
-    },
-    {
-      "purl": "pkg:maven/org.apache.logging.log4j/*",
-      "matcher": "wildcard",
-      "usagePolicy": "deny",
-      "reason": "All log4j packages are denied due to security vulnerabilities."
-    },
-    {
-      "purl": "pkg:pypi/requests@2.28.1",
-      "matcher": "exact",
-      "usagePolicy": "allow",
-      "reason": "This specific version of requests is allowed."
-    }
-  ]
-}
-```
-
-**Example workflow using `package_policy_path`:**
-
-```yaml
-- name: Run SBOM Auditor with Package Policies
-  uses: otto-de/sbom_auditor_action@v1
-  with:
-    github_token: ${{ secrets.GITHUB_TOKEN }}
-    package_policy_path: '.github/config/package_policy.json'
 ```
 
 ### Alternative: Committing the License Report

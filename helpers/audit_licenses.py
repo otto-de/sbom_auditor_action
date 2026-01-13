@@ -100,6 +100,53 @@ def merge_aliases(base_aliases, override_aliases):
     return merged
 
 
+def merge_package_policies(base_policies, override_policies):
+    """
+    Merges two lists of package policies. Override policies take precedence
+    over base policies when they have the same 'purl'.
+    
+    Args:
+        base_policies: List of base package policy dictionaries
+        override_policies: List of override package policy dictionaries
+        
+    Returns:
+        List of merged package policies where override entries replace base entries with same purl
+    """
+    if not override_policies:
+        return base_policies or []
+    
+    if not base_policies:
+        return override_policies or []
+    
+    # Create a dict from base policies indexed by purl (normalized without query params)
+    merged = {}
+    for policy in base_policies:
+        purl = policy.get('purl', '')
+        if purl:
+            normalized_purl = purl.split('?')[0]
+            merged[normalized_purl] = policy
+    
+    # Override/add with custom policies
+    override_count = 0
+    new_count = 0
+    for policy in override_policies:
+        purl = policy.get('purl', '')
+        if purl:
+            normalized_purl = purl.split('?')[0]
+            if normalized_purl in merged:
+                override_count += 1
+                logging.debug(f"🔄 Overriding package policy for '{purl}'")
+            else:
+                new_count += 1
+                logging.debug(f"➕ Adding new package policy for '{purl}'")
+            merged[normalized_purl] = policy
+    
+    if override_count > 0 or new_count > 0:
+        logging.info(f"📦 Package policy merge: {override_count} overridden, {new_count} new policies added")
+    
+    return list(merged.values())
+
+
 def extract_components(sbom_data):
     """Extracts components from SBOM data."""
     components = sbom_data.get('packages', []) or sbom_data.get('components', [])
@@ -367,13 +414,29 @@ def audit_licenses_with_resolution(sbom_path, policy_path, package_policy_path=N
     sbom_data = load_json_file(sbom_path, "SBOM")
     policy_data = load_json_file(policy_path, "Policy")
     
+    # Validate policy structure - info message for packagePolicies-only files
+    if 'packagePolicies' in policy_data and 'policies' not in policy_data:
+        logging.info(f"📦 Policy file '{policy_path}' contains package exceptions (packagePolicies). "
+                    f"These will be merged with the default license policies.")
+    
+    if 'policies' not in policy_data and 'packagePolicies' not in policy_data:
+        logging.warning(f"⚠️ Policy file '{policy_path}' contains neither 'policies' nor 'packagePolicies'. "
+                       f"Expected structure: {{\"policies\": [...]}} and/or {{\"packagePolicies\": [...]}}")
+    
     # Handle policy merging: if base_policy_path is provided, merge with custom policy
-    # Also merge aliases from both policies
+    # Merges both 'policies' (license-based) and 'packagePolicies' (PURL-based) from both files
     if base_policy_path and base_policy_path != policy_path:
         base_policy_data = load_json_file(base_policy_path, "Base Policy")
+        
+        # Merge license policies
         base_policies = base_policy_data.get('policies', [])
         override_policies = policy_data.get('policies', [])
         license_policies = merge_license_policies(base_policies, override_policies)
+        
+        # Merge package policies (PURL-based exceptions) from BOTH policy files
+        base_package_policies = base_policy_data.get('packagePolicies', [])
+        override_package_policies = policy_data.get('packagePolicies', [])
+        package_policies = merge_package_policies(base_package_policies, override_package_policies)
         
         # Merge license aliases (custom aliases override base aliases)
         license_aliases = merge_aliases(
@@ -384,19 +447,26 @@ def audit_licenses_with_resolution(sbom_path, policy_path, package_policy_path=N
             base_policy_data.get('combinedLicenseAliases', {}),
             policy_data.get('combinedLicenseAliases', {})
         )
-        logging.info(f"✅ Merged {len(base_policies)} base policies with {len(override_policies)} custom policies → {len(license_policies)} total")
+        
+        logging.info(f"✅ Merged {len(base_policies)} base license policies with {len(override_policies)} custom → {len(license_policies)} total")
+        if base_package_policies or override_package_policies:
+            logging.info(f"✅ Merged {len(base_package_policies)} base package policies with {len(override_package_policies)} custom → {len(package_policies)} total")
         logging.debug(f"📋 Loaded {len(license_aliases)} license aliases and {len(combined_aliases)} combined aliases")
     else:
         license_policies = policy_data.get('policies', [])
+        package_policies = policy_data.get('packagePolicies', [])
         license_aliases = policy_data.get('licenseAliases', {})
         combined_aliases = policy_data.get('combinedLicenseAliases', {})
         if license_aliases or combined_aliases:
             logging.debug(f"📋 Loaded {len(license_aliases)} license aliases and {len(combined_aliases)} combined aliases from policy")
     
-    package_policies = []
+    # Also load from separate package_policy_path if provided (backwards compatibility)
     if package_policy_path:
         package_policy_data = load_json_file(package_policy_path, "Package Policy")
-        package_policies = package_policy_data.get('packages', [])
+        additional_package_policies = package_policy_data.get('packagePolicies', []) or package_policy_data.get('packages', [])
+        if additional_package_policies:
+            package_policies = merge_package_policies(package_policies, additional_package_policies)
+            logging.info(f"📦 Added {len(additional_package_policies)} package policies from separate file")
     
     # Handle internal dependency patterns
     internal_dependency_patterns_list = []

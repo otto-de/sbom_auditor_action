@@ -2,6 +2,30 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.0] - 2026-01-13
+
+### Added
+- **Unified Policy File Support**: Custom policy files (`policy_path`) now support both `policies` (license rules) AND `packagePolicies` (PURL-based exceptions) in a single file
+  - Both sections are automatically merged with the built-in defaults
+  - No more need for separate `package_policy_path` for simple use cases
+- **New `policy_mode` Input**: Control how custom policies are handled
+  - `merge` (default): Combines custom policies with built-in defaults
+  - `replace`: Uses only the custom policy, ignoring built-in defaults
+- **Package Policy Merging**: Added `merge_package_policies()` function for intelligent PURL-based policy combination
+- **Improved Logging**: Better log messages distinguishing between license policies and package policies during merge
+
+### Changed
+- **Breaking Change (Behavioral)**: Custom `policy_path` files with `packagePolicies` now work automatically (previously ignored)
+- Improved validation messages when policy files contain unexpected structures
+- Documentation completely rewritten for clearer policy configuration guidance
+
+### Deprecated
+- `package_policy_path` input: Use `policy_path` with `packagePolicies` section instead (still works for backwards compatibility)
+
+### Fixed
+- **Bug Fix**: `packagePolicies` in custom policy files were being ignored when using `policy_path` input
+- Policy merge now correctly reports count of both license policies AND package policies
+
 ## [0.4.3] - 2025-07-22
 
 ### Fixed

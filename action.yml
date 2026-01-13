@@ -34,8 +34,12 @@ inputs:
     description: 'Path to the optional package policy JSON file. If not provided, helpers/package_policy.json within the action will be used.'
     required: false
   policy_path:
-    description: 'Path to the optional license policy JSON file. If not provided, helpers/policy.json within the action will be used.'
+    description: 'Path to a custom license policy JSON file. Can contain "policies" (license rules) and/or "packagePolicies" (PURL-based exceptions). By default merged with the built-in policy.'
     required: false
+  policy_mode:
+    description: 'How to handle custom policies: "merge" (default) combines with built-in policies, "replace" uses only the custom policy.'
+    required: false
+    default: 'merge'
   internal_dependency_pattern:
     description: 'A newline-separated list of regex patterns to identify internal dependencies that should be skipped from the audit.'
     required: false
@@ -203,12 +207,17 @@ runs:
         fi
 
         # Construct base policy argument for merging custom policies with default
-        # If user provides a custom policy_path, use the default policy as base for merging
+        # If user provides a custom policy_path, use the default policy as base for merging (unless policy_mode is 'replace')
         BASE_POLICY_ARG=""
         DEFAULT_POLICY="${{ github.action_path }}/helpers/policy.json"
+        POLICY_MODE="${{ inputs.policy_mode }}"
         if [[ -n "${{ inputs.policy_path }}" && "$POLICY_FILE" != "$DEFAULT_POLICY" ]]; then
-          BASE_POLICY_ARG="--base-policy $DEFAULT_POLICY"
-          echo "Info: Merging custom policy '$POLICY_FILE' with default policy. Custom entries will override defaults."
+          if [[ "$POLICY_MODE" == "replace" ]]; then
+            echo "Info: Using custom policy '$POLICY_FILE' as complete replacement (policy_mode=replace)."
+          else
+            BASE_POLICY_ARG="--base-policy $DEFAULT_POLICY"
+            echo "Info: Merging custom policy '$POLICY_FILE' with default policy. Custom entries will override defaults."
+          fi
         fi
 
         eval "python ${{ github.action_path }}/helpers/audit_licenses.py sbom_enriched.json $POLICY_FILE --markdown $DEBUG_ARG $PACKAGE_POLICY_ARG $OPENAI_ARG $AI_PROVIDER_ARGS $BASE_POLICY_ARG --generate-summary" > license-audit-report.md || AUDIT_EXIT_CODE=$?
