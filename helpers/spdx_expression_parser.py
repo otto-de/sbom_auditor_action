@@ -256,6 +256,63 @@ class SPDXExpressionParser:
         
         return license_id
     
+    def _apply_aliases_to_expression(self, expression: str) -> str:
+        """
+        Apply license aliases to the entire expression before tokenization.
+        
+        This handles non-standard license names with spaces like:
+        - "Eclipse Distribution License v. 1.0" → "BSD-3-Clause"
+        - "Public Domain" → "CC0-1.0"
+        - "The Apache Software License, Version 2.0" → "Apache-2.0"
+        
+        Strategy:
+        1. Only apply aliases that contain spaces (non-standard names)
+        2. Apply longest-first to prevent partial matches
+        3. Standard SPDX IDs without spaces are handled by _normalize_license_id
+        """
+        if not expression or not self.license_aliases:
+            return expression
+        
+        # Only consider aliases that contain spaces or special chars (non-SPDX format)
+        # Standard SPDX IDs (no spaces) are handled later by _normalize_license_id
+        space_aliases = {
+            k: v for k, v in self.license_aliases.items() 
+            if ' ' in k or ',' in k or k != k.replace(' ', '')
+        }
+        
+        if not space_aliases:
+            return expression
+        
+        # Sort aliases by length (longest first) to avoid partial matches
+        sorted_aliases = sorted(
+            space_aliases.items(),
+            key=lambda x: len(x[0]),
+            reverse=True
+        )
+        
+        result = expression
+        
+        for alias_lower, spdx_id in sorted_aliases:
+            # Create pattern that matches the alias as a complete phrase
+            # Boundaries: start/end of string, operators (AND/OR/WITH), parentheses, or other spaces
+            # Use word boundary but allow for punctuation in aliases
+            pattern = re.compile(
+                r'(?:^|(?<=\s)|(?<=\()|(?<=\)))' + 
+                re.escape(alias_lower) + 
+                r'(?:$|(?=\s)|(?=\))|(?=\())',
+                re.IGNORECASE
+            )
+            
+            new_result = pattern.sub(spdx_id, result)
+            if new_result != result:
+                self.logger.debug(f"🔄 Applied alias in expression: '{alias_lower}' → '{spdx_id}'")
+                result = new_result
+        
+        if result != expression:
+            self.logger.debug(f"🔄 Expression after alias resolution: '{expression}' → '{result}'")
+        
+        return result
+    
     def parse_and_evaluate(self, expression: str, license_policies: List[Dict]) -> Tuple[str, str]:
         """
         Parse and evaluate an SPDX license expression.
@@ -279,6 +336,11 @@ class SPDXExpressionParser:
             resolved = self.combined_aliases[expr_lower]
             self.logger.debug(f"🔄 Resolved combined alias '{expression}' → '{resolved}'")
             return self.parse_and_evaluate(resolved, license_policies)
+        
+        # Apply license aliases to the entire expression before tokenization
+        # This handles non-standard license names with spaces like:
+        # "Eclipse Distribution License v. 1.0" → "BSD-3-Clause"
+        expression = self._apply_aliases_to_expression(expression)
         
         try:
             tokens = self._tokenize(expression)
