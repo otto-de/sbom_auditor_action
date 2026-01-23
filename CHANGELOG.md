@@ -2,6 +2,42 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.6.0] - 2026-01-23
+
+### Fixed
+- **Critical Bug Fix: Combined License Expression Parsing**: Fixed a bug where valid SPDX combined license expressions like `EPL-2.0 AND GPL-2.0-with-classpath-exception` returned "needs-review" even though both individual licenses were approved.
+  - Root cause: The `with` substring inside `GPL-2.0-with-classpath-exception` was incorrectly tokenized as the `WITH` operator
+
+### Changed
+- **Complete SPDX Expression Parser Rewrite**: The license expression parser has been completely rewritten to be fully compliant with the [SPDX Specification v3.0.1](https://spdx.github.io/spdx-spec/v3.0.1/annexes/spdx-license-expressions/)
+  - Implements the official ABNF grammar from the SPDX specification
+  - Proper tokenizer that recognizes operators only when surrounded by whitespace
+  - Correct operator precedence: OR < AND < WITH < + (lowest to highest)
+  - Operators must be exact case: `AND`/`and`, `OR`/`or`, `WITH`/`with` (not mixed case like `And`)
+  - Full support for `LicenseRef-xxx` and `DocumentRef-xxx:LicenseRef-xxx` custom references
+  - Full support for `AdditionRef-xxx` for license exceptions
+  - Proper handling of "or-later" suffix (`GPL-2.0+`) without whitespace before `+`
+  - Support for non-standard legacy syntax: `w/` as `WITH`, ` + ` (with spaces) as `AND`
+
+### Added
+- **Token-based Parsing**: New `TokenType` enum and `Token` class for proper lexical analysis
+- **ABNF Pattern Validation**: Regex patterns matching SPDX `idstring` specification
+- **Comprehensive Test Suite**: Added ABNF conformance tests covering:
+  - Standard SPDX expressions
+  - Complex nested expressions with parentheses
+  - Case sensitivity for operators
+  - Custom license references (LicenseRef, DocumentRef, AdditionRef)
+  - Or-later (+) suffix handling
+  - Legacy non-standard formats
+
+### Technical Details
+- Tokenizer correctly distinguishes between:
+  - `GPL-2.0+` → LICENSE_ID + PLUS (or-later)
+  - `GPL-2.0 + MIT` → LICENSE_ID + AND + LICENSE_ID (legacy syntax)
+- Parser uses recursive descent with proper precedence handling
+- 14/14 ABNF conformance tests passing
+- Full integration tested with 515-component production SBOM
+
 ## [0.5.2] - 2026-01-13
 
 ### Fixed
