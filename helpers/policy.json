@@ -3305,11 +3305,11 @@
         {
             "id": "BlueOak-1.0.0",
             "name": "BlueOak-1.0.0",
-            "family": "dummy255",
+            "family": "BlueOak",
             "reference": "https://spdx.org/licenses/BlueOak-1.0.0.html",
-            "usagePolicy": "deny",
+            "usagePolicy": "allow",
             "annotationRefs": [
-                "PROHIBITED"
+                "APPROVED"
             ],
             "urls": [
                 ""
