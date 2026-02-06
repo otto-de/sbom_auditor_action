@@ -2,6 +2,33 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.0.0] - 2026-02-06
+
+### Added
+- **New Allowed Licenses** (approved by legal department):
+  - BlueOak-1.0.0 (#10)
+  - Python-2.0 (#14)
+  - Saxpath (#14)
+  - ZPL-2.0 / ZPL-2.1 (Zope Public License) (#14)
+  - Dnspython license alias → ISC (#14)
+- **License Aliases**:
+  - "bouncy castle licence" → MIT (#12)
+  - "the (new) bsd license" → BSD-3-Clause (#12)
+  - "cddl/gplv2+ce" → CDDL-1.1 (#13)
+- **Comprehensive Test Suite**: Expanded from 6 to 89 unit tests
+  - `test_audit_licenses.py`: 26 tests for audit core functionality
+  - `test_license_resolution.py`: 40 tests for SPDX parsing and license resolution
+  - `test_merge.py`: 17 tests for policy merging
+  - `test_ai_summary.py`: 6 tests for AI summary generation
+  - Integration tests moved to separate `integration_tests/` folder
+
+### Changed
+- **Test Suite Modernization**: Converted all test files to proper `unittest.TestCase` classes with assertions
+- Test files no longer execute code on import
+
+### Fixed
+- Fixed broken import in `test_maven_resolution.py` (`enrich_sbom_enhanced` → `enrich_sbom`)
+
 ## [0.6.0] - 2026-01-23
 
 ### Fixed
@@ -140,7 +167,7 @@ All notable changes to this project will be documented in this file.
 - Updated README.md with comprehensive examples for all four AI providers and caching documentation
 - Enhanced test coverage for multi-provider functionality and caching
 
-## [1.0.0] - 2025-06-30
+## [0.3.5] - 2025-06-30
 
 ### Added
 - **AI-Assisted Summary**: Integrates with the OpenAI API to generate a high-level summary of the license audit report. This is enabled by providing the `openai_api_key` input.
