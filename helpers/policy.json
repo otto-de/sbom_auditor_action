@@ -2020,9 +2020,9 @@
             "name": "Python-2.0",
             "family": "Python-2.0",
             "reference": "https://spdx.org/licenses/Python-2.0.html",
-            "usagePolicy": "deny",
+            "usagePolicy": "allow",
             "annotationRefs": [
-                "PROHIBITED"
+                "APPROVED"
             ],
             "urls": [
                 ""
@@ -2044,11 +2044,11 @@
         {
             "id": "Saxpath",
             "name": "Saxpath",
-            "family": "dummy158",
+            "family": "Saxpath",
             "reference": "https://spdx.org/licenses/Saxpath.html",
-            "usagePolicy": "deny",
+            "usagePolicy": "allow",
             "annotationRefs": [
-                "PROHIBITED"
+                "APPROVED"
             ],
             "urls": [
                 ""
@@ -2332,9 +2332,9 @@
             "name": "ZPL-2.0",
             "family": "ZPL",
             "reference": "https://spdx.org/licenses/ZPL-2.0.html",
-            "usagePolicy": "deny",
+            "usagePolicy": "allow",
             "annotationRefs": [
-                "PROHIBITED"
+                "APPROVED"
             ],
             "urls": [
                 ""
@@ -2345,9 +2345,9 @@
             "name": "ZPL-2.1",
             "family": "ZPL",
             "reference": "https://spdx.org/licenses/ZPL-2.1.html",
-            "usagePolicy": "deny",
+            "usagePolicy": "allow",
             "annotationRefs": [
-                "PROHIBITED"
+                "APPROVED"
             ],
             "urls": [
                 ""
@@ -4048,6 +4048,7 @@
         
         "isc license": "ISC",
         "the isc license": "ISC",
+        "dnspython license": "ISC",
         
         "unlicense": "Unlicense",
         "the unlicense": "Unlicense",
