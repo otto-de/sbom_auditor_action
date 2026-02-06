@@ -4063,7 +4063,8 @@
     },
     "combinedLicenseAliases": {
         "_comment": "Mapping of combined/dual license expressions to a preferred single license. Keys are lowercase.",
-        
+
+        "cddl/gplv2+ce": "CDDL-1.1",
         "cddl + gplv2": "CDDL-1.1",
         "cddl+gplv2": "CDDL-1.1",
         "cddl + gplv2 with classpath exception": "CDDL-1.1",
