@@ -10,7 +10,7 @@ Tests the complete pipeline for resolving "non-standard" licenses from Maven pac
 import json
 import tempfile
 import os
-from enrich_sbom_enhanced import enrich_sbom_with_intelligent_resolution
+from enrich_sbom import enrich_sbom_with_intelligent_resolution
 
 
 def create_test_sbom_with_junit():
@@ -150,7 +150,7 @@ def test_direct_license_extraction():
         ("com.fasterxml.jackson.core:jackson-core", "2.13.3")
     ]
     
-    from enrich_sbom_enhanced import get_maven_license_from_pom
+    from enrich_sbom import get_maven_license_from_pom
     
     for package_name, version in test_packages:
         print(f"📦 Testing {package_name}:{version}")
