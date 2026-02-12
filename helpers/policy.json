@@ -1236,6 +1236,45 @@
             ]
         },
         {
+            "id": "CC-BY-2.0",
+            "name": "CC-BY-2.0",
+            "family": "CC-BY",
+            "reference": "https://spdx.org/licenses/CC-BY-2.0.html",
+            "usagePolicy": "allow",
+            "annotationRefs": [
+                "APPROVED"
+            ],
+            "urls": [
+                ""
+            ]
+        },
+        {
+            "id": "CC-BY-3.0",
+            "name": "CC-BY-3.0",
+            "family": "CC-BY",
+            "reference": "https://spdx.org/licenses/CC-BY-3.0.html",
+            "usagePolicy": "allow",
+            "annotationRefs": [
+                "APPROVED"
+            ],
+            "urls": [
+                ""
+            ]
+        },
+        {
+            "id": "CC-BY-4.0",
+            "name": "CC-BY-4.0",
+            "family": "CC-BY",
+            "reference": "https://spdx.org/licenses/CC-BY-4.0.html",
+            "usagePolicy": "allow",
+            "annotationRefs": [
+                "APPROVED"
+            ],
+            "urls": [
+                ""
+            ]
+        },
+        {
             "id": "CFITSIO",
             "name": "CFITSIO",
             "family": "dummy96",
@@ -3708,11 +3747,11 @@
         {
             "id": "CC-BY-4.0 AND MIT AND Apache-2.0",
             "name": "CC-BY-4.0 AND MIT AND Apache-2.0",
-            "family": "dummy286",
+            "family": "CC-BY",
             "reference": "",
-            "usagePolicy": "deny",
+            "usagePolicy": "allow",
             "annotationRefs": [
-                "PROHIBITED"
+                "APPROVED"
             ],
             "urls": [
                 ""

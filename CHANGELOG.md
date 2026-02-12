@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.1.0] - 2026-02-12
+
+### Added
+- **New Allowed Licenses** (approved by legal department):
+  - CC-BY-2.0 (Creative Commons Attribution 2.0) (#17)
+  - CC-BY-3.0 (Creative Commons Attribution 3.0) (#17)
+  - CC-BY-4.0 (Creative Commons Attribution 4.0) (#17)
+  - Updated compound expression `CC-BY-4.0 AND MIT AND Apache-2.0` to allowed (#17)
+
 ## [1.0.0] - 2026-02-06
 
 ### Added
