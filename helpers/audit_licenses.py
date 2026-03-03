@@ -365,6 +365,25 @@ def audit_component_with_resolution(component, license_policies, package_policie
                                 }
                             }
                             return [result]
+                        else:
+                            # Resolver could not normalize the POM license; fall back to original string
+                            final_policy = find_license_policy(real_license, license_policies, license_aliases, combined_aliases)
+                            if not final_policy:
+                                final_policy = "needs-review"
+                            result = {
+                                "package": f"{component_name}@{component_version}",
+                                "purl": purl,
+                                "license": real_license,
+                                "policy": final_policy,
+                                "resolution": {
+                                    "original": real_license,
+                                    "resolved": resolution_result.get('resolved'),
+                                    "method": resolution_result['method'],
+                                    "confidence": resolution_result['confidence'],
+                                    "source": "maven_pom_fallback"
+                                }
+                            }
+                            return [result]
             except Exception as e:
                 logging.debug(f"  POM fallback failed for {component_name}: {e}")
 

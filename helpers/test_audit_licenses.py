@@ -9,7 +9,7 @@ import json
 import tempfile
 import os
 import logging
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 from audit_licenses import (
     extract_components,
@@ -348,8 +348,22 @@ class TestIssue19NoLicenseForKnownPackages(unittest.TestCase):
             {'id': 'EPL-2.0', 'usagePolicy': 'allow'},
         ]
         self.package_policies = []
-        # Create a real LicenseResolver (uses SPDX fuzzy matching, no AI needed)
+        # Patch SPDX data fetching to avoid live network calls during tests
+        spdx_licenses = {
+            'MIT': {'name': 'MIT License', 'id': 'MIT', 'deprecated': False, 'osi_approved': True, 'see_also': []},
+            'Apache-2.0': {'name': 'Apache License 2.0', 'id': 'Apache-2.0', 'deprecated': False, 'osi_approved': True, 'see_also': []},
+            'EPL-2.0': {'name': 'Eclipse Public License 2.0', 'id': 'EPL-2.0', 'deprecated': False, 'osi_approved': True, 'see_also': []},
+        }
+        self._spdx_patcher = patch.object(
+            LicenseResolver,
+            '_fetch_spdx_data',
+            return_value=(spdx_licenses, {}),
+        )
+        self._spdx_patcher.start()
         self.license_resolver = LicenseResolver()
+
+    def tearDown(self):
+        self._spdx_patcher.stop()
 
     @patch('audit_licenses.get_maven_license_from_pom')
     def test_spring_webmvc_resolved_via_pom_fallback(self, mock_pom):
@@ -430,6 +444,29 @@ class TestIssue19NoLicenseForKnownPackages(unittest.TestCase):
         )
         self.assertEqual(results[0]['license'], 'NO-LICENSE-FOUND')
         self.assertEqual(results[0]['policy'], 'needs-review')
+
+    @patch('audit_licenses.get_maven_license_from_pom')
+    def test_pom_fallback_unresolved_uses_original_license(self, mock_pom):
+        """When POM returns a license but resolver can't normalize it, use original string."""
+        mock_pom.return_value = "Some Exotic License v42"
+        component = {
+            'name': 'exotic-lib',
+            'versionInfo': '1.0.0',
+            'licenseConcluded': 'NOASSERTION',
+            'externalRefs': [
+                {'referenceType': 'purl',
+                 'referenceLocator': 'pkg:maven/com.example/exotic-lib@1.0.0'}
+            ]
+        }
+        results = audit_component_with_resolution(
+            component, self.policies, self.package_policies,
+            license_resolver=self.license_resolver
+        )
+        # Should use the original POM license, not NO-LICENSE-FOUND
+        self.assertEqual(results[0]['license'], 'Some Exotic License v42')
+        self.assertEqual(results[0]['policy'], 'needs-review')
+        self.assertEqual(results[0]['resolution']['source'], 'maven_pom_fallback')
+        self.assertEqual(results[0]['resolution']['original'], 'Some Exotic License v42')
 
     def test_npm_package_no_pom_fallback(self):
         """Non-Maven packages should NOT trigger POM fallback."""
