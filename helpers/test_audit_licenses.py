@@ -545,5 +545,91 @@ class TestIssue19NoLicenseForKnownPackages(unittest.TestCase):
         self.assertEqual(results[0]['resolution']['original'], 'Apache License, Version 2.0')
 
 
+class TestIssue21AllowNewLicenses(unittest.TestCase):
+    """Tests for Issue #21: Allow DSDP, curl, PSF-2.0, MIT AND Zlib, ODC-By-1.0, ASLv2."""
+
+    def setUp(self):
+        """Load actual policy.json for integration-level tests."""
+        policy_path = os.path.join(os.path.dirname(__file__), 'policy.json')
+        with open(policy_path, 'r') as f:
+            policy_data = json.load(f)
+        self.policies = policy_data['policies']
+        self.aliases = policy_data.get('licenseAliases', {})
+        self.combined_aliases = policy_data.get('combinedLicenseAliases', {})
+
+    def test_curl_license_allowed(self):
+        """curl license should be allowed per legal approval."""
+        result = find_license_policy('curl', self.policies)
+        self.assertEqual(result, 'allow')
+
+    def test_psf_2_0_license_allowed(self):
+        """PSF-2.0 license should be allowed per legal approval."""
+        result = find_license_policy('PSF-2.0', self.policies)
+        self.assertEqual(result, 'allow')
+
+    def test_zlib_license_allowed(self):
+        """Zlib license should be allowed per legal approval."""
+        result = find_license_policy('Zlib', self.policies)
+        self.assertEqual(result, 'allow')
+
+    def test_zlib_acknowledgement_allowed(self):
+        """zlib-acknowledgement license should be allowed."""
+        result = find_license_policy('zlib-acknowledgement', self.policies)
+        self.assertEqual(result, 'allow')
+
+    def test_dsdp_license_allowed(self):
+        """DSDP license should be allowed per legal approval."""
+        result = find_license_policy('DSDP', self.policies)
+        self.assertEqual(result, 'allow')
+
+    def test_odc_by_1_0_license_allowed(self):
+        """ODC-By-1.0 license should be allowed per legal approval."""
+        result = find_license_policy('ODC-By-1.0', self.policies)
+        self.assertEqual(result, 'allow')
+
+    def test_mit_and_zlib_expression_allowed(self):
+        """MIT AND Zlib compound expression should be allowed (both constituents allowed)."""
+        result = find_license_policy('MIT AND Zlib', self.policies)
+        self.assertEqual(result, 'allow')
+
+    def test_aslv2_alias_resolves_to_apache(self):
+        """ASLv2 alias should resolve to Apache-2.0 and be allowed."""
+        result = find_license_policy('ASLv2', self.policies, self.aliases)
+        self.assertEqual(result, 'allow')
+
+    def test_asl_2_0_alias_resolves_to_apache(self):
+        """ASL 2.0 alias should resolve to Apache-2.0 and be allowed."""
+        result = find_license_policy('ASL 2.0', self.policies, self.aliases)
+        self.assertEqual(result, 'allow')
+
+
+class TestIssue22QosCopyrightAlias(unittest.TestCase):
+    """Tests for Issue #22: QOS.ch copyright text should map to MIT."""
+
+    def setUp(self):
+        """Load actual policy.json for integration-level tests."""
+        policy_path = os.path.join(os.path.dirname(__file__), 'policy.json')
+        with open(policy_path, 'r') as f:
+            policy_data = json.load(f)
+        self.policies = policy_data['policies']
+        self.aliases = policy_data.get('licenseAliases', {})
+
+    def test_qos_copyright_resolves_to_mit(self):
+        """QOS.ch copyright text should resolve to MIT via alias."""
+        result = find_license_policy(
+            'Copyright (c) 2004-2022 QOS.ch Sarl (Switzerland)',
+            self.policies, self.aliases
+        )
+        self.assertEqual(result, 'allow')
+
+    def test_qos_copyright_case_insensitive(self):
+        """QOS.ch copyright alias should work case-insensitively."""
+        result = find_license_policy(
+            'copyright (c) 2004-2022 qos.ch sarl (switzerland)',
+            self.policies, self.aliases
+        )
+        self.assertEqual(result, 'allow')
+
+
 if __name__ == '__main__':
     unittest.main()

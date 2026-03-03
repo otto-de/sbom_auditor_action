@@ -1357,9 +1357,9 @@
             "name": "curl",
             "family": "curl",
             "reference": "https://spdx.org/licenses/curl.html",
-            "usagePolicy": "deny",
+            "usagePolicy": "allow",
             "annotationRefs": [
-                "PROHIBITED"
+                "APPROVED"
             ],
             "urls": [
                 ""
@@ -2044,11 +2044,11 @@
         {
             "id": "PSF-2.0",
             "name": "PSF-2.0",
-            "family": "dummy155",
+            "family": "PSF",
             "reference": "https://spdx.org/licenses/PSF-2.0.html",
-            "usagePolicy": "deny",
+            "usagePolicy": "allow",
             "annotationRefs": [
-                "PROHIBITED"
+                "APPROVED"
             ],
             "urls": [
                 ""
@@ -2345,9 +2345,9 @@
             "name": "Zlib",
             "family": "Zlib",
             "reference": "https://spdx.org/licenses/Zlib.html",
-            "usagePolicy": "deny",
+            "usagePolicy": "allow",
             "annotationRefs": [
-                "PROHIBITED"
+                "APPROVED"
             ],
             "urls": [
                 ""
@@ -2358,9 +2358,9 @@
             "name": "zlib-acknowledgement",
             "family": "zlib",
             "reference": "https://spdx.org/licenses/zlib-acknowledgement.html",
-            "usagePolicy": "deny",
+            "usagePolicy": "allow",
             "annotationRefs": [
-                "PROHIBITED"
+                "APPROVED"
             ],
             "urls": [
                 ""
@@ -3017,6 +3017,19 @@
             ]
         },
         {
+            "id": "ODC-By-1.0",
+            "name": "ODC-By-1.0",
+            "family": "ODC",
+            "reference": "https://spdx.org/licenses/ODC-By-1.0.html",
+            "usagePolicy": "allow",
+            "annotationRefs": [
+                "APPROVED"
+            ],
+            "urls": [
+                ""
+            ]
+        },
+        {
             "id": "OLDAP-1.1",
             "name": "OLDAP-1.1",
             "family": "dummy230",
@@ -3474,11 +3487,11 @@
         {
             "id": "DSDP",
             "name": "DSDP",
-            "family": "dummy265",
+            "family": "DSDP",
             "reference": "https://spdx.org/licenses/DSDP.html",
-            "usagePolicy": "deny",
+            "usagePolicy": "allow",
             "annotationRefs": [
-                "PROHIBITED"
+                "APPROVED"
             ],
             "urls": [
                 ""
@@ -4099,7 +4112,12 @@
         "public domain, per creative commons cc0": "CC0-1.0",
         "public domain, per creative commons cc0 and bsd-2-clause": "CC0-1.0",
         
-        "gd": "MIT"
+        "gd": "MIT",
+        
+        "aslv2": "Apache-2.0",
+        "asl 2.0": "Apache-2.0",
+        
+        "copyright (c) 2004-2022 qos.ch sarl (switzerland)": "MIT"
     },
     "combinedLicenseAliases": {
         "_comment": "Mapping of combined/dual license expressions to a preferred single license. Keys are lowercase.",

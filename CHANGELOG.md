@@ -19,6 +19,18 @@ All notable changes to this project will be documented in this file.
   - No POM fallback without `license_resolver`
   - Resolution metadata includes `source: maven_pom_fallback`
   - GitHub Actions without license still allowed (regression test)
+- **New Allowed Licenses** (approved by legal department) (#21):
+  - DSDP
+  - curl
+  - PSF-2.0 (Python Software Foundation License 2.0)
+  - Zlib and zlib-acknowledgement
+  - ODC-By-1.0 (Open Data Commons Attribution License 1.0)
+  - `MIT AND Zlib` compound expression (both constituents now allowed)
+- **New License Aliases** (#21):
+  - `ASLv2` → Apache-2.0
+  - `ASL 2.0` → Apache-2.0
+- **QOS.ch Copyright Alias** (#22): The copyright notice `"Copyright (c) 2004-2022 QOS.ch Sarl (Switzerland)"` (found in slf4j-api JARs) is now mapped to `MIT` via license alias, resolving false `NO-LICENSE-FOUND` results.
+- **11 New Unit Tests** for Issues #21 and #22
 
 ## [1.1.0] - 2026-02-12
 
