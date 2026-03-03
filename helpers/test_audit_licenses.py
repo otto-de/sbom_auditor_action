@@ -9,6 +9,7 @@ import json
 import tempfile
 import os
 import logging
+from unittest.mock import patch
 
 from audit_licenses import (
     extract_components,
@@ -16,6 +17,7 @@ from audit_licenses import (
     find_license_policy,
     audit_component_with_resolution
 )
+from license_resolver import LicenseResolver
 
 # Suppress logging during tests
 logging.disable(logging.CRITICAL)
@@ -329,6 +331,341 @@ class TestLoadJsonFile(unittest.TestCase):
             self.assertEqual(result, {'test': 'bom'})
         finally:
             os.unlink(temp_path)
+
+
+class TestIssue19NoLicenseForKnownPackages(unittest.TestCase):
+    """Issue #19: Well-known Maven packages flagged as NO-LICENSE-FOUND.
+
+    With the fix, the audit phase attempts a Maven POM fallback before
+    returning NO-LICENSE-FOUND for Maven packages when a license_resolver
+    is available.
+    """
+
+    def setUp(self):
+        self.policies = [
+            {'id': 'MIT', 'usagePolicy': 'allow'},
+            {'id': 'Apache-2.0', 'usagePolicy': 'allow'},
+            {'id': 'EPL-2.0', 'usagePolicy': 'allow'},
+        ]
+        self.package_policies = []
+        # Patch SPDX data fetching to avoid live network calls during tests
+        spdx_licenses = {
+            'MIT': {'name': 'MIT License', 'id': 'MIT', 'deprecated': False, 'osi_approved': True, 'see_also': []},
+            'Apache-2.0': {'name': 'Apache License 2.0', 'id': 'Apache-2.0', 'deprecated': False, 'osi_approved': True, 'see_also': []},
+            'EPL-2.0': {'name': 'Eclipse Public License 2.0', 'id': 'EPL-2.0', 'deprecated': False, 'osi_approved': True, 'see_also': []},
+        }
+        self._spdx_patcher = patch.object(
+            LicenseResolver,
+            '_fetch_spdx_data',
+            return_value=(spdx_licenses, {}),
+        )
+        self._spdx_patcher.start()
+        self.license_resolver = LicenseResolver()
+
+    def tearDown(self):
+        self._spdx_patcher.stop()
+
+    @patch('audit_licenses.get_maven_license_from_pom')
+    def test_spring_webmvc_resolved_via_pom_fallback(self, mock_pom):
+        """FIX: spring-webmvc NOASSERTION → Apache-2.0 via POM fallback."""
+        mock_pom.return_value = "Apache License, Version 2.0"
+        component = {
+            'name': 'spring-webmvc',
+            'versionInfo': '6.1.14',
+            'licenseConcluded': 'NOASSERTION',
+            'externalRefs': [
+                {'referenceType': 'purl',
+                 'referenceLocator': 'pkg:maven/org.springframework/spring-webmvc@6.1.14'}
+            ]
+        }
+        results = audit_component_with_resolution(
+            component, self.policies, self.package_policies,
+            license_resolver=self.license_resolver
+        )
+        self.assertEqual(results[0]['license'], 'Apache-2.0')
+        self.assertEqual(results[0]['policy'], 'allow')
+        mock_pom.assert_called_once_with('org.springframework:spring-webmvc', '6.1.14')
+
+    @patch('audit_licenses.get_maven_license_from_pom')
+    def test_slf4j_api_resolved_via_pom_fallback(self, mock_pom):
+        """FIX: slf4j-api NOASSERTION → MIT via POM fallback."""
+        mock_pom.return_value = "MIT License"
+        component = {
+            'name': 'slf4j-api',
+            'versionInfo': '2.0.16',
+            'licenseConcluded': 'NOASSERTION',
+            'externalRefs': [
+                {'referenceType': 'purl',
+                 'referenceLocator': 'pkg:maven/org.slf4j/slf4j-api@2.0.16'}
+            ]
+        }
+        results = audit_component_with_resolution(
+            component, self.policies, self.package_policies,
+            license_resolver=self.license_resolver
+        )
+        self.assertEqual(results[0]['license'], 'MIT')
+        self.assertEqual(results[0]['policy'], 'allow')
+
+    @patch('audit_licenses.get_maven_license_from_pom')
+    def test_spring_context_no_license_field_resolved(self, mock_pom):
+        """FIX: Missing licenseConcluded → resolved via POM fallback."""
+        mock_pom.return_value = "The Apache Software License, Version 2.0"
+        component = {
+            'name': 'spring-context',
+            'versionInfo': '6.1.14',
+            'externalRefs': [
+                {'referenceType': 'purl',
+                 'referenceLocator': 'pkg:maven/org.springframework/spring-context@6.1.14'}
+            ]
+        }
+        results = audit_component_with_resolution(
+            component, self.policies, self.package_policies,
+            license_resolver=self.license_resolver
+        )
+        self.assertEqual(results[0]['license'], 'Apache-2.0')
+        self.assertEqual(results[0]['policy'], 'allow')
+
+    @patch('audit_licenses.get_maven_license_from_pom')
+    def test_pom_fallback_returns_none_still_no_license(self, mock_pom):
+        """When POM fallback also fails, still returns NO-LICENSE-FOUND."""
+        mock_pom.return_value = None
+        component = {
+            'name': 'mystery-lib',
+            'versionInfo': '1.0.0',
+            'licenseConcluded': 'NOASSERTION',
+            'externalRefs': [
+                {'referenceType': 'purl',
+                 'referenceLocator': 'pkg:maven/com.example/mystery-lib@1.0.0'}
+            ]
+        }
+        results = audit_component_with_resolution(
+            component, self.policies, self.package_policies,
+            license_resolver=self.license_resolver
+        )
+        self.assertEqual(results[0]['license'], 'NO-LICENSE-FOUND')
+        self.assertEqual(results[0]['policy'], 'needs-review')
+
+    @patch('audit_licenses.get_maven_license_from_pom')
+    def test_pom_fallback_unresolved_uses_original_license(self, mock_pom):
+        """When POM returns a license but resolver can't normalize it, use original string."""
+        mock_pom.return_value = "Some Exotic License v42"
+        component = {
+            'name': 'exotic-lib',
+            'versionInfo': '1.0.0',
+            'licenseConcluded': 'NOASSERTION',
+            'externalRefs': [
+                {'referenceType': 'purl',
+                 'referenceLocator': 'pkg:maven/com.example/exotic-lib@1.0.0'}
+            ]
+        }
+        results = audit_component_with_resolution(
+            component, self.policies, self.package_policies,
+            license_resolver=self.license_resolver
+        )
+        # Should use the original POM license, not NO-LICENSE-FOUND
+        self.assertEqual(results[0]['license'], 'Some Exotic License v42')
+        self.assertEqual(results[0]['policy'], 'needs-review')
+        self.assertEqual(results[0]['resolution']['source'], 'maven_pom_fallback')
+        self.assertEqual(results[0]['resolution']['original'], 'Some Exotic License v42')
+
+    def test_npm_package_no_pom_fallback(self):
+        """Non-Maven packages should NOT trigger POM fallback."""
+        component = {
+            'name': 'lodash',
+            'versionInfo': '4.17.21',
+            'licenseConcluded': 'NOASSERTION',
+            'externalRefs': [
+                {'referenceType': 'purl',
+                 'referenceLocator': 'pkg:npm/lodash@4.17.21'}
+            ]
+        }
+        results = audit_component_with_resolution(
+            component, self.policies, self.package_policies,
+            license_resolver=self.license_resolver
+        )
+        # npm packages have no POM fallback, should remain NO-LICENSE-FOUND
+        self.assertEqual(results[0]['license'], 'NO-LICENSE-FOUND')
+        self.assertEqual(results[0]['policy'], 'needs-review')
+
+    def test_no_resolver_no_pom_fallback(self):
+        """Without license_resolver, no POM fallback is attempted."""
+        component = {
+            'name': 'spring-webmvc',
+            'versionInfo': '6.1.14',
+            'licenseConcluded': 'NOASSERTION',
+            'externalRefs': [
+                {'referenceType': 'purl',
+                 'referenceLocator': 'pkg:maven/org.springframework/spring-webmvc@6.1.14'}
+            ]
+        }
+        results = audit_component_with_resolution(
+            component, self.policies, self.package_policies,
+            license_resolver=None
+        )
+        self.assertEqual(results[0]['license'], 'NO-LICENSE-FOUND')
+        self.assertEqual(results[0]['policy'], 'needs-review')
+
+    def test_known_package_with_license_works_fine(self):
+        """CONTROL: Package WITH existing license works correctly."""
+        component = {
+            'name': 'jackson-core',
+            'versionInfo': '2.18.2',
+            'licenseConcluded': 'Apache-2.0',
+            'externalRefs': [
+                {'referenceType': 'purl',
+                 'referenceLocator': 'pkg:maven/com.fasterxml.jackson.core/jackson-core@2.18.2'}
+            ]
+        }
+        results = audit_component_with_resolution(
+            component, self.policies, self.package_policies
+        )
+        self.assertEqual(results[0]['license'], 'Apache-2.0')
+        self.assertEqual(results[0]['policy'], 'allow')
+
+    def test_package_policy_workaround_works(self):
+        """WORKAROUND: Package policy override correctly allows the package."""
+        component = {
+            'name': 'spring-webmvc',
+            'versionInfo': '6.1.14',
+            'licenseConcluded': 'NOASSERTION',
+            'externalRefs': [
+                {'referenceType': 'purl',
+                 'referenceLocator': 'pkg:maven/org.springframework/spring-webmvc@6.1.14'}
+            ]
+        }
+        package_policies = [
+            {'purl': 'pkg:maven/org.springframework/spring-webmvc',
+             'usagePolicy': 'allow',
+             'reason': 'Apache License 2.0'}
+        ]
+        results = audit_component_with_resolution(
+            component, self.policies, package_policies
+        )
+        self.assertIn('allow', results[0]['policy'])
+
+    def test_github_action_still_allowed_without_license(self):
+        """GitHub Actions without license should still be allowed (no regression)."""
+        component = {
+            'name': 'actions/checkout',
+            'versionInfo': 'v3',
+            'licenseConcluded': 'NOASSERTION',
+            'externalRefs': [
+                {'referenceType': 'purl',
+                 'referenceLocator': 'pkg:githubactions/actions/checkout@v3'}
+            ]
+        }
+        results = audit_component_with_resolution(
+            component, self.policies, self.package_policies,
+            license_resolver=self.license_resolver
+        )
+        self.assertEqual(results[0]['policy'], 'allow')
+
+    @patch('audit_licenses.get_maven_license_from_pom')
+    def test_pom_fallback_includes_resolution_metadata(self, mock_pom):
+        """POM fallback result includes resolution metadata."""
+        mock_pom.return_value = "Apache License, Version 2.0"
+        component = {
+            'name': 'spring-webmvc',
+            'versionInfo': '6.1.14',
+            'licenseConcluded': 'NOASSERTION',
+            'externalRefs': [
+                {'referenceType': 'purl',
+                 'referenceLocator': 'pkg:maven/org.springframework/spring-webmvc@6.1.14'}
+            ]
+        }
+        results = audit_component_with_resolution(
+            component, self.policies, self.package_policies,
+            license_resolver=self.license_resolver
+        )
+        self.assertIn('resolution', results[0])
+        self.assertEqual(results[0]['resolution']['source'], 'maven_pom_fallback')
+        self.assertEqual(results[0]['resolution']['original'], 'Apache License, Version 2.0')
+
+
+class TestIssue21AllowNewLicenses(unittest.TestCase):
+    """Tests for Issue #21: Allow DSDP, curl, PSF-2.0, MIT AND Zlib, ODC-By-1.0, ASLv2."""
+
+    def setUp(self):
+        """Load actual policy.json for integration-level tests."""
+        policy_path = os.path.join(os.path.dirname(__file__), 'policy.json')
+        with open(policy_path, 'r') as f:
+            policy_data = json.load(f)
+        self.policies = policy_data['policies']
+        self.aliases = policy_data.get('licenseAliases', {})
+        self.combined_aliases = policy_data.get('combinedLicenseAliases', {})
+
+    def test_curl_license_allowed(self):
+        """curl license should be allowed per legal approval."""
+        result = find_license_policy('curl', self.policies)
+        self.assertEqual(result, 'allow')
+
+    def test_psf_2_0_license_allowed(self):
+        """PSF-2.0 license should be allowed per legal approval."""
+        result = find_license_policy('PSF-2.0', self.policies)
+        self.assertEqual(result, 'allow')
+
+    def test_zlib_license_allowed(self):
+        """Zlib license should be allowed per legal approval."""
+        result = find_license_policy('Zlib', self.policies)
+        self.assertEqual(result, 'allow')
+
+    def test_zlib_acknowledgement_allowed(self):
+        """zlib-acknowledgement license should be allowed."""
+        result = find_license_policy('zlib-acknowledgement', self.policies)
+        self.assertEqual(result, 'allow')
+
+    def test_dsdp_license_allowed(self):
+        """DSDP license should be allowed per legal approval."""
+        result = find_license_policy('DSDP', self.policies)
+        self.assertEqual(result, 'allow')
+
+    def test_odc_by_1_0_license_allowed(self):
+        """ODC-By-1.0 license should be allowed per legal approval."""
+        result = find_license_policy('ODC-By-1.0', self.policies)
+        self.assertEqual(result, 'allow')
+
+    def test_mit_and_zlib_expression_allowed(self):
+        """MIT AND Zlib compound expression should be allowed (both constituents allowed)."""
+        result = find_license_policy('MIT AND Zlib', self.policies)
+        self.assertEqual(result, 'allow')
+
+    def test_aslv2_alias_resolves_to_apache(self):
+        """ASLv2 alias should resolve to Apache-2.0 and be allowed."""
+        result = find_license_policy('ASLv2', self.policies, self.aliases)
+        self.assertEqual(result, 'allow')
+
+    def test_asl_2_0_alias_resolves_to_apache(self):
+        """ASL 2.0 alias should resolve to Apache-2.0 and be allowed."""
+        result = find_license_policy('ASL 2.0', self.policies, self.aliases)
+        self.assertEqual(result, 'allow')
+
+
+class TestIssue22QosCopyrightAlias(unittest.TestCase):
+    """Tests for Issue #22: QOS.ch copyright text should map to MIT."""
+
+    def setUp(self):
+        """Load actual policy.json for integration-level tests."""
+        policy_path = os.path.join(os.path.dirname(__file__), 'policy.json')
+        with open(policy_path, 'r') as f:
+            policy_data = json.load(f)
+        self.policies = policy_data['policies']
+        self.aliases = policy_data.get('licenseAliases', {})
+
+    def test_qos_copyright_resolves_to_mit(self):
+        """QOS.ch copyright text should resolve to MIT via alias."""
+        result = find_license_policy(
+            'Copyright (c) 2004-2022 QOS.ch Sarl (Switzerland)',
+            self.policies, self.aliases
+        )
+        self.assertEqual(result, 'allow')
+
+    def test_qos_copyright_case_insensitive(self):
+        """QOS.ch copyright alias should work case-insensitively."""
+        result = find_license_policy(
+            'copyright (c) 2004-2022 qos.ch sarl (switzerland)',
+            self.policies, self.aliases
+        )
+        self.assertEqual(result, 'allow')
 
 
 if __name__ == '__main__':

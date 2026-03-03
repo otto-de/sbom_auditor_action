@@ -2,6 +2,36 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.2.0] - 2026-03-03
+
+### Fixed
+- **Critical Bug Fix: Maven packages reported as "NO-LICENSE-FOUND"** (#19): Well-known Maven packages (e.g., `spring-webmvc`, `slf4j-api`, `spring-context`) were incorrectly flagged as "NO-LICENSE-FOUND" even though their licenses are publicly available.
+  - **Root cause**: When `deps.dev` returned empty license data, the Maven POM fallback was not triggered. The fallback only ran for the special `"non-standard"` value, not for empty/null responses.
+  - **Root cause (audit layer)**: The audit phase returned `NO-LICENSE-FOUND` immediately without attempting any license resolution for packages with `NOASSERTION`/`NONE`/empty `licenseConcluded`.
+
+### Added
+- **Maven POM Fallback for Empty deps.dev Responses**: When `deps.dev` returns no license data for a Maven package, the enrichment phase now queries Maven Central's POM file directly (`get_maven_license_from_pom()`). The license name (e.g., "Apache License, Version 2.0") is normalized to its SPDX identifier (`Apache-2.0`) via `LicenseResolver`. Results are cached for subsequent runs.
+- **Audit-Phase POM Fallback (Defense-in-Depth)**: Before marking a Maven package as `NO-LICENSE-FOUND`, the audit phase now also attempts a POM fallback when a `license_resolver` is available. This ensures licenses are resolved even if enrichment was skipped or failed.
+- **10 New Unit Tests** for Issue #19 covering:
+  - Maven POM fallback for `spring-webmvc` (Apache-2.0), `slf4j-api` (MIT), `spring-context` (Apache-2.0)
+  - POM fallback failure gracefully falls back to `NO-LICENSE-FOUND`
+  - Non-Maven packages (npm) do not trigger POM fallback
+  - No POM fallback without `license_resolver`
+  - Resolution metadata includes `source: maven_pom_fallback`
+  - GitHub Actions without license still allowed (regression test)
+- **New Allowed Licenses** (approved by legal department) (#21):
+  - DSDP
+  - curl
+  - PSF-2.0 (Python Software Foundation License 2.0)
+  - Zlib and zlib-acknowledgement
+  - ODC-By-1.0 (Open Data Commons Attribution License 1.0)
+  - `MIT AND Zlib` compound expression (both constituents now allowed)
+- **New License Aliases** (#21):
+  - `ASLv2` → Apache-2.0
+  - `ASL 2.0` → Apache-2.0
+- **QOS.ch Copyright Alias** (#22): The copyright notice `"Copyright (c) 2004-2022 QOS.ch Sarl (Switzerland)"` (found in slf4j-api JARs) is now mapped to `MIT` via license alias, resolving false `NO-LICENSE-FOUND` results.
+- **11 New Unit Tests** for Issues #21 and #22
+
 ## [1.1.0] - 2026-02-12
 
 ### Added

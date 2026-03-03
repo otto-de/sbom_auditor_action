@@ -399,10 +399,47 @@ def enrich_sbom_with_intelligent_resolution(input_sbom_path, output_sbom_path, c
                     if purl not in skipped_packages["not_found"]:
                         skipped_packages["not_found"].append(purl)
             else:
-                logging.warning(f"NO LICENSE FOUND: {package_name} -> UNKNOWN")
-                skipped += 1
-                if purl not in skipped_packages["not_found"]:
-                    skipped_packages["not_found"].append(purl)
+                # deps.dev returned no license data - try Maven POM fallback (Issue #19)
+                if ecosystem == "maven" and resolve_licenses:
+                    logging.info(f"🔍 deps.dev returned no license for Maven package {package_name}, trying POM fallback...")
+                    real_license = get_maven_license_from_pom(package_name, version)
+                    if real_license:
+                        logging.info(f"🔍 Found license in POM for {package_name}: {real_license}")
+                        resolved_license = real_license
+                        if license_resolver:
+                            resolution_result = license_resolver.resolve_license(real_license)
+                            if resolution_result['resolved']:
+                                resolved_license = resolution_result['resolved']
+                                license_resolved += 1
+                                method = resolution_result['method']
+                                resolution_stats[method] = resolution_stats.get(method, 0) + 1
+                                logging.debug(f"🎯 RESOLVED (POM fallback): '{real_license}' → '{resolved_license}' ({method})")
+                                if 'enrichment' not in pkg:
+                                    pkg['enrichment'] = {}
+                                pkg['enrichment']['licenseResolutions'] = [{
+                                    'original': real_license,
+                                    'resolved': resolved_license,
+                                    'method': method,
+                                    'confidence': resolution_result['confidence'],
+                                    'source': 'maven_pom_fallback'
+                                }]
+                        pkg["licenseConcluded"] = resolved_license
+                        enriched += 1
+                        # Cache the POM result for future runs
+                        cache_manager.cache_package_info(cache_key, {
+                            'license_data': [resolved_license],
+                            'source': 'maven_pom_fallback'
+                        })
+                    else:
+                        logging.warning(f"NO LICENSE FOUND: {package_name} -> UNKNOWN (POM fallback also failed)")
+                        skipped += 1
+                        if purl not in skipped_packages["not_found"]:
+                            skipped_packages["not_found"].append(purl)
+                else:
+                    logging.warning(f"NO LICENSE FOUND: {package_name} -> UNKNOWN")
+                    skipped += 1
+                    if purl not in skipped_packages["not_found"]:
+                        skipped_packages["not_found"].append(purl)
 
         except Exception as e:
             skipped += 1

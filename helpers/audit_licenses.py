@@ -17,6 +17,7 @@ import os
 from ai_summary import generate_summary
 from license_resolver import LicenseResolver
 from spdx_expression_parser import SPDXExpressionParser
+from enrich_sbom import get_maven_license_from_pom
 
 # Logging will be configured in main() based on debug flag
 
@@ -330,8 +331,64 @@ def audit_component_with_resolution(component, license_policies, package_policie
 
     # 2. Handle cases with no license
     if not license_concluded or license_concluded in ['NOASSERTION', 'NONE']:
+        # For Maven packages, try POM fallback before giving up (Issue #19)
+        if purl and purl.startswith('pkg:maven/') and license_resolver:
+            logging.info(f"🔍 No license for Maven package {component_name}@{component_version}, trying POM fallback...")
+            try:
+                # Extract package name from PURL: pkg:maven/group/artifact@version
+                purl_parts = purl.split('/')
+                if len(purl_parts) >= 3:
+                    namespace = purl_parts[1]
+                    name = purl_parts[2].split('@')[0]
+                    maven_package = f"{namespace}:{name}"
+                    maven_version = purl_parts[2].split('@')[1] if '@' in purl_parts[2] else None
+                    real_license = get_maven_license_from_pom(maven_package, maven_version)
+                    if real_license:
+                        logging.info(f"🔍 POM fallback found license for {component_name}: {real_license}")
+                        resolution_result = license_resolver.resolve_license(real_license)
+                        if resolution_result['resolved']:
+                            resolved_license = resolution_result['resolved']
+                            final_policy = find_license_policy(resolved_license, license_policies, license_aliases, combined_aliases)
+                            if not final_policy:
+                                final_policy = "needs-review"
+                            result = {
+                                "package": f"{component_name}@{component_version}",
+                                "purl": purl,
+                                "license": resolved_license,
+                                "policy": final_policy,
+                                "resolution": {
+                                    "original": real_license,
+                                    "resolved": resolved_license,
+                                    "method": resolution_result['method'],
+                                    "confidence": resolution_result['confidence'],
+                                    "source": "maven_pom_fallback"
+                                }
+                            }
+                            return [result]
+                        else:
+                            # Resolver could not normalize the POM license; fall back to original string
+                            final_policy = find_license_policy(real_license, license_policies, license_aliases, combined_aliases)
+                            if not final_policy:
+                                final_policy = "needs-review"
+                            result = {
+                                "package": f"{component_name}@{component_version}",
+                                "purl": purl,
+                                "license": real_license,
+                                "policy": final_policy,
+                                "resolution": {
+                                    "original": real_license,
+                                    "resolved": resolution_result.get('resolved'),
+                                    "method": resolution_result['method'],
+                                    "confidence": resolution_result['confidence'],
+                                    "source": "maven_pom_fallback"
+                                }
+                            }
+                            return [result]
+            except Exception as e:
+                logging.debug(f"  POM fallback failed for {component_name}: {e}")
+
         policy = "needs-review"
-        if purl.startswith('pkg:githubactions/'):
+        if purl and purl.startswith('pkg:githubactions/'):
             logging.debug(f"  GitHub Action {component_name}@{component_version} has no license, but is allowed.")
             policy = "allow"
         else:
