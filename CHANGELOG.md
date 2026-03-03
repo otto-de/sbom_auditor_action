@@ -2,6 +2,24 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.2.0] - 2026-03-03
+
+### Fixed
+- **Critical Bug Fix: Maven packages reported as "NO-LICENSE-FOUND"** (#19): Well-known Maven packages (e.g., `spring-webmvc`, `slf4j-api`, `spring-context`) were incorrectly flagged as "NO-LICENSE-FOUND" even though their licenses are publicly available.
+  - **Root cause**: When `deps.dev` returned empty license data, the Maven POM fallback was not triggered. The fallback only ran for the special `"non-standard"` value, not for empty/null responses.
+  - **Root cause (audit layer)**: The audit phase returned `NO-LICENSE-FOUND` immediately without attempting any license resolution for packages with `NOASSERTION`/`NONE`/empty `licenseConcluded`.
+
+### Added
+- **Maven POM Fallback for Empty deps.dev Responses**: When `deps.dev` returns no license data for a Maven package, the enrichment phase now queries Maven Central's POM file directly (`get_maven_license_from_pom()`). The license name (e.g., "Apache License, Version 2.0") is normalized to its SPDX identifier (`Apache-2.0`) via `LicenseResolver`. Results are cached for subsequent runs.
+- **Audit-Phase POM Fallback (Defense-in-Depth)**: Before marking a Maven package as `NO-LICENSE-FOUND`, the audit phase now also attempts a POM fallback when a `license_resolver` is available. This ensures licenses are resolved even if enrichment was skipped or failed.
+- **10 New Unit Tests** for Issue #19 covering:
+  - Maven POM fallback for `spring-webmvc` (Apache-2.0), `slf4j-api` (MIT), `spring-context` (Apache-2.0)
+  - POM fallback failure gracefully falls back to `NO-LICENSE-FOUND`
+  - Non-Maven packages (npm) do not trigger POM fallback
+  - No POM fallback without `license_resolver`
+  - Resolution metadata includes `source: maven_pom_fallback`
+  - GitHub Actions without license still allowed (regression test)
+
 ## [1.1.0] - 2026-02-12
 
 ### Added

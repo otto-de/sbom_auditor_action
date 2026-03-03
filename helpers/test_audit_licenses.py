@@ -9,6 +9,7 @@ import json
 import tempfile
 import os
 import logging
+from unittest.mock import patch, MagicMock
 
 from audit_licenses import (
     extract_components,
@@ -16,6 +17,7 @@ from audit_licenses import (
     find_license_policy,
     audit_component_with_resolution
 )
+from license_resolver import LicenseResolver
 
 # Suppress logging during tests
 logging.disable(logging.CRITICAL)
@@ -329,6 +331,218 @@ class TestLoadJsonFile(unittest.TestCase):
             self.assertEqual(result, {'test': 'bom'})
         finally:
             os.unlink(temp_path)
+
+
+class TestIssue19NoLicenseForKnownPackages(unittest.TestCase):
+    """Issue #19: Well-known Maven packages flagged as NO-LICENSE-FOUND.
+
+    With the fix, the audit phase attempts a Maven POM fallback before
+    returning NO-LICENSE-FOUND for Maven packages when a license_resolver
+    is available.
+    """
+
+    def setUp(self):
+        self.policies = [
+            {'id': 'MIT', 'usagePolicy': 'allow'},
+            {'id': 'Apache-2.0', 'usagePolicy': 'allow'},
+            {'id': 'EPL-2.0', 'usagePolicy': 'allow'},
+        ]
+        self.package_policies = []
+        # Create a real LicenseResolver (uses SPDX fuzzy matching, no AI needed)
+        self.license_resolver = LicenseResolver()
+
+    @patch('audit_licenses.get_maven_license_from_pom')
+    def test_spring_webmvc_resolved_via_pom_fallback(self, mock_pom):
+        """FIX: spring-webmvc NOASSERTION → Apache-2.0 via POM fallback."""
+        mock_pom.return_value = "Apache License, Version 2.0"
+        component = {
+            'name': 'spring-webmvc',
+            'versionInfo': '6.1.14',
+            'licenseConcluded': 'NOASSERTION',
+            'externalRefs': [
+                {'referenceType': 'purl',
+                 'referenceLocator': 'pkg:maven/org.springframework/spring-webmvc@6.1.14'}
+            ]
+        }
+        results = audit_component_with_resolution(
+            component, self.policies, self.package_policies,
+            license_resolver=self.license_resolver
+        )
+        self.assertEqual(results[0]['license'], 'Apache-2.0')
+        self.assertEqual(results[0]['policy'], 'allow')
+        mock_pom.assert_called_once_with('org.springframework:spring-webmvc', '6.1.14')
+
+    @patch('audit_licenses.get_maven_license_from_pom')
+    def test_slf4j_api_resolved_via_pom_fallback(self, mock_pom):
+        """FIX: slf4j-api NOASSERTION → MIT via POM fallback."""
+        mock_pom.return_value = "MIT License"
+        component = {
+            'name': 'slf4j-api',
+            'versionInfo': '2.0.16',
+            'licenseConcluded': 'NOASSERTION',
+            'externalRefs': [
+                {'referenceType': 'purl',
+                 'referenceLocator': 'pkg:maven/org.slf4j/slf4j-api@2.0.16'}
+            ]
+        }
+        results = audit_component_with_resolution(
+            component, self.policies, self.package_policies,
+            license_resolver=self.license_resolver
+        )
+        self.assertEqual(results[0]['license'], 'MIT')
+        self.assertEqual(results[0]['policy'], 'allow')
+
+    @patch('audit_licenses.get_maven_license_from_pom')
+    def test_spring_context_no_license_field_resolved(self, mock_pom):
+        """FIX: Missing licenseConcluded → resolved via POM fallback."""
+        mock_pom.return_value = "The Apache Software License, Version 2.0"
+        component = {
+            'name': 'spring-context',
+            'versionInfo': '6.1.14',
+            'externalRefs': [
+                {'referenceType': 'purl',
+                 'referenceLocator': 'pkg:maven/org.springframework/spring-context@6.1.14'}
+            ]
+        }
+        results = audit_component_with_resolution(
+            component, self.policies, self.package_policies,
+            license_resolver=self.license_resolver
+        )
+        self.assertEqual(results[0]['license'], 'Apache-2.0')
+        self.assertEqual(results[0]['policy'], 'allow')
+
+    @patch('audit_licenses.get_maven_license_from_pom')
+    def test_pom_fallback_returns_none_still_no_license(self, mock_pom):
+        """When POM fallback also fails, still returns NO-LICENSE-FOUND."""
+        mock_pom.return_value = None
+        component = {
+            'name': 'mystery-lib',
+            'versionInfo': '1.0.0',
+            'licenseConcluded': 'NOASSERTION',
+            'externalRefs': [
+                {'referenceType': 'purl',
+                 'referenceLocator': 'pkg:maven/com.example/mystery-lib@1.0.0'}
+            ]
+        }
+        results = audit_component_with_resolution(
+            component, self.policies, self.package_policies,
+            license_resolver=self.license_resolver
+        )
+        self.assertEqual(results[0]['license'], 'NO-LICENSE-FOUND')
+        self.assertEqual(results[0]['policy'], 'needs-review')
+
+    def test_npm_package_no_pom_fallback(self):
+        """Non-Maven packages should NOT trigger POM fallback."""
+        component = {
+            'name': 'lodash',
+            'versionInfo': '4.17.21',
+            'licenseConcluded': 'NOASSERTION',
+            'externalRefs': [
+                {'referenceType': 'purl',
+                 'referenceLocator': 'pkg:npm/lodash@4.17.21'}
+            ]
+        }
+        results = audit_component_with_resolution(
+            component, self.policies, self.package_policies,
+            license_resolver=self.license_resolver
+        )
+        # npm packages have no POM fallback, should remain NO-LICENSE-FOUND
+        self.assertEqual(results[0]['license'], 'NO-LICENSE-FOUND')
+        self.assertEqual(results[0]['policy'], 'needs-review')
+
+    def test_no_resolver_no_pom_fallback(self):
+        """Without license_resolver, no POM fallback is attempted."""
+        component = {
+            'name': 'spring-webmvc',
+            'versionInfo': '6.1.14',
+            'licenseConcluded': 'NOASSERTION',
+            'externalRefs': [
+                {'referenceType': 'purl',
+                 'referenceLocator': 'pkg:maven/org.springframework/spring-webmvc@6.1.14'}
+            ]
+        }
+        results = audit_component_with_resolution(
+            component, self.policies, self.package_policies,
+            license_resolver=None
+        )
+        self.assertEqual(results[0]['license'], 'NO-LICENSE-FOUND')
+        self.assertEqual(results[0]['policy'], 'needs-review')
+
+    def test_known_package_with_license_works_fine(self):
+        """CONTROL: Package WITH existing license works correctly."""
+        component = {
+            'name': 'jackson-core',
+            'versionInfo': '2.18.2',
+            'licenseConcluded': 'Apache-2.0',
+            'externalRefs': [
+                {'referenceType': 'purl',
+                 'referenceLocator': 'pkg:maven/com.fasterxml.jackson.core/jackson-core@2.18.2'}
+            ]
+        }
+        results = audit_component_with_resolution(
+            component, self.policies, self.package_policies
+        )
+        self.assertEqual(results[0]['license'], 'Apache-2.0')
+        self.assertEqual(results[0]['policy'], 'allow')
+
+    def test_package_policy_workaround_works(self):
+        """WORKAROUND: Package policy override correctly allows the package."""
+        component = {
+            'name': 'spring-webmvc',
+            'versionInfo': '6.1.14',
+            'licenseConcluded': 'NOASSERTION',
+            'externalRefs': [
+                {'referenceType': 'purl',
+                 'referenceLocator': 'pkg:maven/org.springframework/spring-webmvc@6.1.14'}
+            ]
+        }
+        package_policies = [
+            {'purl': 'pkg:maven/org.springframework/spring-webmvc',
+             'usagePolicy': 'allow',
+             'reason': 'Apache License 2.0'}
+        ]
+        results = audit_component_with_resolution(
+            component, self.policies, package_policies
+        )
+        self.assertIn('allow', results[0]['policy'])
+
+    def test_github_action_still_allowed_without_license(self):
+        """GitHub Actions without license should still be allowed (no regression)."""
+        component = {
+            'name': 'actions/checkout',
+            'versionInfo': 'v3',
+            'licenseConcluded': 'NOASSERTION',
+            'externalRefs': [
+                {'referenceType': 'purl',
+                 'referenceLocator': 'pkg:githubactions/actions/checkout@v3'}
+            ]
+        }
+        results = audit_component_with_resolution(
+            component, self.policies, self.package_policies,
+            license_resolver=self.license_resolver
+        )
+        self.assertEqual(results[0]['policy'], 'allow')
+
+    @patch('audit_licenses.get_maven_license_from_pom')
+    def test_pom_fallback_includes_resolution_metadata(self, mock_pom):
+        """POM fallback result includes resolution metadata."""
+        mock_pom.return_value = "Apache License, Version 2.0"
+        component = {
+            'name': 'spring-webmvc',
+            'versionInfo': '6.1.14',
+            'licenseConcluded': 'NOASSERTION',
+            'externalRefs': [
+                {'referenceType': 'purl',
+                 'referenceLocator': 'pkg:maven/org.springframework/spring-webmvc@6.1.14'}
+            ]
+        }
+        results = audit_component_with_resolution(
+            component, self.policies, self.package_policies,
+            license_resolver=self.license_resolver
+        )
+        self.assertIn('resolution', results[0])
+        self.assertEqual(results[0]['resolution']['source'], 'maven_pom_fallback')
+        self.assertEqual(results[0]['resolution']['original'], 'Apache License, Version 2.0')
 
 
 if __name__ == '__main__':
