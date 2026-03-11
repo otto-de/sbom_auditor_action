@@ -4117,7 +4117,15 @@
         "aslv2": "Apache-2.0",
         "asl 2.0": "Apache-2.0",
         
-        "copyright (c) 2004-2022 qos.ch sarl (switzerland)": "MIT"
+        "copyright (c) 2004-2022 qos.ch sarl (switzerland)": "MIT",
+
+        "slf4j license": "MIT",
+        "slf4j mit license": "MIT"
+    },
+    "licensePatternAliases": {
+        "_comment": "Regex patterns (Python re syntax, case-insensitive) matched against the full license string. Use this for licenses where the exact text varies (e.g. year ranges). Keys are Python regex patterns.",
+
+        "copyright \\(c\\) \\d{4}(-\\d{4})? qos\\.ch sarl \\(switzerland\\)(?!.*\\b(AND|OR|WITH)\\b).*": "MIT"
     },
     "licensePatternAliases": {
         "_comment": "Regex patterns (Python re syntax, case-insensitive) matched against the full license string. Use this for licenses where the exact text varies (e.g. year ranges). Keys are Python regex patterns.",
