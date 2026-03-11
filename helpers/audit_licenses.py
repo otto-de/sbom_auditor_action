@@ -207,10 +207,10 @@ def find_package_policy(purl, package_policies):
     return None
 
 
-def find_license_policy(license_id, license_policies, license_aliases=None, combined_aliases=None):
+def find_license_policy(license_id, license_policies, license_aliases=None, combined_aliases=None, pattern_aliases=None):
     """Finds the policy for a given license ID with SPDX expression support."""
     # Initialize SPDX parser with aliases from policy
-    parser = SPDXExpressionParser(license_aliases=license_aliases, combined_aliases=combined_aliases)
+    parser = SPDXExpressionParser(license_aliases=license_aliases, combined_aliases=combined_aliases, pattern_aliases=pattern_aliases)
     
     # Parse and evaluate SPDX expression
     policy, explanation = parser.parse_and_evaluate(license_id, license_policies)
@@ -279,7 +279,7 @@ def generate_summary_table(total_packages, internal_packages, gh_actions_count, 
 
 def audit_component_with_resolution(component, license_policies, package_policies, 
                                    license_resolver=None, internal_dependency_patterns=None,
-                                   license_aliases=None, combined_aliases=None):
+                                   license_aliases=None, combined_aliases=None, pattern_aliases=None):
     """
     Audits a single component with intelligent license resolution.
     
@@ -291,6 +291,7 @@ def audit_component_with_resolution(component, license_policies, package_policie
         internal_dependency_patterns: Patterns for internal dependencies
         license_aliases: Mapping of non-standard license names to SPDX IDs
         combined_aliases: Mapping of combined license expressions to single license
+        pattern_aliases: Mapping of regex patterns to SPDX IDs
         
     Returns:
         List of audit results for the component
@@ -348,7 +349,7 @@ def audit_component_with_resolution(component, license_policies, package_policie
                         resolution_result = license_resolver.resolve_license(real_license)
                         if resolution_result['resolved']:
                             resolved_license = resolution_result['resolved']
-                            final_policy = find_license_policy(resolved_license, license_policies, license_aliases, combined_aliases)
+                            final_policy = find_license_policy(resolved_license, license_policies, license_aliases, combined_aliases, pattern_aliases)
                             if not final_policy:
                                 final_policy = "needs-review"
                             result = {
@@ -367,7 +368,7 @@ def audit_component_with_resolution(component, license_policies, package_policie
                             return [result]
                         else:
                             # Resolver could not normalize the POM license; fall back to original string
-                            final_policy = find_license_policy(real_license, license_policies, license_aliases, combined_aliases)
+                            final_policy = find_license_policy(real_license, license_policies, license_aliases, combined_aliases, pattern_aliases)
                             if not final_policy:
                                 final_policy = "needs-review"
                             result = {
@@ -409,7 +410,7 @@ def audit_component_with_resolution(component, license_policies, package_policie
     # Check if license needs resolution
     needs_resolution = (
         license_concluded in ['non-standard', 'Weird unknown license'] or
-        find_license_policy(license_concluded, license_policies, license_aliases, combined_aliases) is None
+        find_license_policy(license_concluded, license_policies, license_aliases, combined_aliases, pattern_aliases) is None
     )
     
     if needs_resolution and license_resolver:
@@ -448,7 +449,7 @@ def audit_component_with_resolution(component, license_policies, package_policie
 
     # 4. Check policy for the (potentially resolved) license
     final_license = resolved_license
-    license_policy = find_license_policy(final_license, license_policies, license_aliases, combined_aliases)
+    license_policy = find_license_policy(final_license, license_policies, license_aliases, combined_aliases, pattern_aliases)
     
     if license_policy:
         policy = license_policy
@@ -533,18 +534,23 @@ def audit_licenses_with_resolution(sbom_path, policy_path, package_policy_path=N
             base_policy_data.get('combinedLicenseAliases', {}),
             policy_data.get('combinedLicenseAliases', {})
         )
+        pattern_aliases = merge_aliases(
+            base_policy_data.get('licensePatternAliases', {}),
+            policy_data.get('licensePatternAliases', {})
+        )
         
         logging.info(f"✅ Merged {len(base_policies)} base license policies with {len(override_policies)} custom → {len(license_policies)} total")
         if base_package_policies or override_package_policies:
             logging.info(f"✅ Merged {len(base_package_policies)} base package policies with {len(override_package_policies)} custom → {len(package_policies)} total")
-        logging.debug(f"📋 Loaded {len(license_aliases)} license aliases and {len(combined_aliases)} combined aliases")
+        logging.debug(f"📋 Loaded {len(license_aliases)} license aliases, {len(combined_aliases)} combined aliases, and {len(pattern_aliases)} pattern aliases")
     else:
         license_policies = policy_data.get('policies', [])
         package_policies = policy_data.get('packagePolicies', [])
         license_aliases = policy_data.get('licenseAliases', {})
         combined_aliases = policy_data.get('combinedLicenseAliases', {})
-        if license_aliases or combined_aliases:
-            logging.debug(f"📋 Loaded {len(license_aliases)} license aliases and {len(combined_aliases)} combined aliases from policy")
+        pattern_aliases = policy_data.get('licensePatternAliases', {})
+        if license_aliases or combined_aliases or pattern_aliases:
+            logging.debug(f"📋 Loaded {len(license_aliases)} license aliases, {len(combined_aliases)} combined aliases, and {len(pattern_aliases)} pattern aliases from policy")
     
     # Also load from separate package_policy_path if provided (backwards compatibility)
     if package_policy_path:
@@ -597,7 +603,7 @@ def audit_licenses_with_resolution(sbom_path, policy_path, package_policy_path=N
         audit_results = audit_component_with_resolution(
             component, license_policies, package_policies, 
             license_resolver, internal_dependency_patterns_list,
-            license_aliases, combined_aliases
+            license_aliases, combined_aliases, pattern_aliases
         )
         all_audit_results.extend(audit_results)
         

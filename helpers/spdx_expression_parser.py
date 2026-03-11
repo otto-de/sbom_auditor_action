@@ -90,24 +90,38 @@ class SPDXExpressionParser:
     - Supports parentheses for grouping
     """
     
-    def __init__(self, license_aliases: Dict[str, str] = None, combined_aliases: Dict[str, str] = None):
+    def __init__(self, license_aliases: Optional[Dict[str, str]] = None, combined_aliases: Optional[Dict[str, str]] = None,
+                 pattern_aliases: Optional[Dict[str, str]] = None):
         """
         Initialize the parser.
         
         Args:
             license_aliases: Mapping of non-standard license names to SPDX IDs.
             combined_aliases: Mapping of combined expressions to single licenses.
+            pattern_aliases: Mapping of Python regex patterns (case-insensitive) to SPDX IDs.
+                             Used for licenses where the exact text varies (e.g. year ranges).
         """
         self.logger = logging.getLogger(__name__)
         self.license_aliases = license_aliases or {}
         self.combined_aliases = combined_aliases or {}
+        raw_pattern_aliases = pattern_aliases or {}
         
         # Remove _comment keys if present (from JSON)
         self.license_aliases = {k.lower(): v for k, v in self.license_aliases.items() if k != '_comment'}
         self.combined_aliases = {k.lower(): v for k, v in self.combined_aliases.items() if k != '_comment'}
+        raw_pattern_aliases = {k: v for k, v in raw_pattern_aliases.items() if k != '_comment'}
         
-        self.logger.debug(f"Initialized SPDXExpressionParser with {len(self.license_aliases)} license aliases "
-                         f"and {len(self.combined_aliases)} combined aliases")
+        # Compile pattern aliases to regex objects (case-insensitive)
+        self._compiled_pattern_aliases = []
+        for pattern_str, spdx_id in raw_pattern_aliases.items():
+            try:
+                self._compiled_pattern_aliases.append((re.compile(pattern_str, re.IGNORECASE), spdx_id))
+            except re.error as e:
+                self.logger.warning(f"Invalid regex in licensePatternAliases: {pattern_str!r} — {e}")
+        
+        self.logger.debug(f"Initialized SPDXExpressionParser with {len(self.license_aliases)} license aliases, "
+                         f"{len(self.combined_aliases)} combined aliases, "
+                         f"and {len(self._compiled_pattern_aliases)} pattern aliases")
     
     def _is_valid_idstring(self, s: str) -> bool:
         """Check if string is a valid SPDX idstring (ALPHA / DIGIT / "-" / ".")"""
@@ -242,6 +256,7 @@ class SPDXExpressionParser:
         Normalize a license ID using the alias mapping.
         
         License IDs in SPDX are case-insensitive, so we do case-insensitive lookup.
+        Falls back to pattern aliases if no exact alias matches.
         """
         if not license_id:
             return license_id
@@ -253,6 +268,12 @@ class SPDXExpressionParser:
             result = self.license_aliases[lookup_key]
             self.logger.debug(f"🔄 Normalized license ID '{license_id}' → '{result}'")
             return result
+        
+        # Fall back to pattern aliases
+        for pattern, spdx_id in self._compiled_pattern_aliases:
+            if pattern.fullmatch(license_id):
+                self.logger.debug(f"🔄 Pattern alias matched license ID '{license_id}' → '{spdx_id}'")
+                return spdx_id
         
         return license_id
     
@@ -270,10 +291,25 @@ class SPDXExpressionParser:
         2. Apply longest-first to prevent partial matches
         3. Standard SPDX IDs without spaces are handled by _normalize_license_id
         """
-        if not expression or not self.license_aliases:
+        if not expression or (not self.license_aliases and not self._compiled_pattern_aliases):
             return expression
         
-        # Only consider aliases that contain spaces or special chars (non-SPDX format)
+        result = expression
+        
+        # Apply pattern aliases first (longest pattern wins by iteration order — sort by pattern length desc)
+        if self._compiled_pattern_aliases:
+            for pattern, spdx_id in self._compiled_pattern_aliases:
+                new_result = pattern.sub(spdx_id, result, flags=re.IGNORECASE) if not pattern.flags & re.IGNORECASE else pattern.sub(spdx_id, result)
+                if new_result != result:
+                    self.logger.debug(f"🔄 Applied pattern alias in expression: '{pattern.pattern}' → '{spdx_id}'")
+                    result = new_result
+
+        if not self.license_aliases:
+            if result != expression:
+                self.logger.debug(f"🔄 Expression after alias resolution: '{expression}' → '{result}'")
+            return result
+
+        # Only consider exact aliases that contain spaces or special chars (non-SPDX format)
         # Standard SPDX IDs (no spaces) are handled later by _normalize_license_id
         space_aliases = {
             k: v for k, v in self.license_aliases.items() 
@@ -281,7 +317,9 @@ class SPDXExpressionParser:
         }
         
         if not space_aliases:
-            return expression
+            if result != expression:
+                self.logger.debug(f"🔄 Expression after alias resolution: '{expression}' → '{result}'")
+            return result
         
         # Sort aliases by length (longest first) to avoid partial matches
         sorted_aliases = sorted(
@@ -290,20 +328,18 @@ class SPDXExpressionParser:
             reverse=True
         )
         
-        result = expression
-        
         for alias_lower, spdx_id in sorted_aliases:
             # Create pattern that matches the alias as a complete phrase
             # Boundaries: start/end of string, operators (AND/OR/WITH), parentheses, or other spaces
             # Use word boundary but allow for punctuation in aliases
-            pattern = re.compile(
+            alias_pattern = re.compile(
                 r'(?:^|(?<=\s)|(?<=\()|(?<=\)))' + 
                 re.escape(alias_lower) + 
                 r'(?:$|(?=\s)|(?=\))|(?=\())',
                 re.IGNORECASE
             )
             
-            new_result = pattern.sub(spdx_id, result)
+            new_result = alias_pattern.sub(spdx_id, result)
             if new_result != result:
                 self.logger.debug(f"🔄 Applied alias in expression: '{alias_lower}' → '{spdx_id}'")
                 result = new_result
