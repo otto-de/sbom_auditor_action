@@ -17,6 +17,7 @@ from audit_licenses import (
     find_license_policy,
     audit_component_with_resolution
 )
+from spdx_expression_parser import SPDXExpressionParser
 from license_resolver import LicenseResolver
 
 # Suppress logging during tests
@@ -728,6 +729,20 @@ class TestIssue25QosCopyrightPatternAlias(unittest.TestCase):
         )
         # Should NOT resolve to allow via the QOS.ch pattern
         self.assertNotEqual(result, 'allow')
+
+    def test_qos_copyright_does_not_consume_spdx_operator(self):
+        """QOS.ch pattern must NOT greedily consume a trailing AND/OR SPDX expression."""
+        # Pattern sub should NOT replace 'Copyright ... AND GPL-3.0-only' → 'MIT',
+        # which would silently drop the GPL term and produce a false-positive allow.
+        parser = SPDXExpressionParser(
+            license_aliases=self.aliases,
+            pattern_aliases=self.pattern_aliases
+        )
+        result = parser._apply_aliases_to_expression(
+            'Copyright (c) 2004-2023 QOS.ch Sarl (Switzerland) AND GPL-3.0-only'
+        )
+        # The copyright part must NOT have consumed the AND GPL-3.0-only tail
+        self.assertIn('GPL-3.0-only', result)
 
 
 if __name__ == '__main__':
