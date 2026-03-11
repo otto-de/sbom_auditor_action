@@ -2,6 +2,8 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
 ## [1.2.0] - 2026-03-03
 
 ### Fixed
@@ -197,6 +199,7 @@ All notable changes to this project will be documented in this file.
   - Updated dependencies to include `boto3` for AWS Bedrock support
 - **Enhanced AI Prompts**: Improved AI prompt structure for more detailed license compliance analysis
 - **Provider-Specific Error Handling**: Each AI provider has tailored error handling and fallback mechanisms
+- **`debug` Input**: Added `debug` input (`true`/`false`) to enable detailed debug logging for troubleshooting enrichment and audit steps
 
 ### Changed
 - **Performance**: SBOM enrichment is now 703x faster on subsequent runs with caching enabled
