@@ -67,3 +67,19 @@ Please make sure all tests pass before submitting a pull request.
 6.  In the pull request description, clearly explain the changes you've made and link to any relevant issues.
 
 We will review your pull request as soon as possible. Thank you for your contribution!
+
+## Versioning
+
+This project follows [Semantic Versioning](https://semver.org/) (`MAJOR.MINOR.PATCH`):
+
+| Change type | Version bump | Example |
+|---|---|---|
+| Bug fix | Patch (`z`) | `v1.4.0` → `v1.4.1` |
+| New feature (backwards-compatible) | Minor (`y`) | `v1.4.1` → `v1.5.0` |
+| Breaking change | Major (`x`) | `v1.5.0` → `v2.0.0` |
+
+When creating a release:
+1. Update `CHANGELOG.md` — move items from `[Unreleased]` to a new versioned section.
+2. Commit with `chore: release vX.Y.Z`.
+3. Tag the commit: `git tag vX.Y.Z && git push --tags`.
+4. Create a GitHub release from the tag.
