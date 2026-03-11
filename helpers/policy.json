@@ -4119,6 +4119,11 @@
         
         "copyright (c) 2004-2022 qos.ch sarl (switzerland)": "MIT"
     },
+    "licensePatternAliases": {
+        "_comment": "Regex patterns (Python re syntax, case-insensitive) matched against the full license string. Use this for licenses where the exact text varies (e.g. year ranges). Keys are Python regex patterns.",
+
+        "copyright \\(c\\) \\d{4}(-\\d{4})? qos\\.ch sarl \\(switzerland\\).*": "MIT"
+    },
     "combinedLicenseAliases": {
         "_comment": "Mapping of combined/dual license expressions to a preferred single license. Keys are lowercase.",
 

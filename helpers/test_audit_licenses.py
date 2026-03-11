@@ -668,5 +668,67 @@ class TestIssue22QosCopyrightAlias(unittest.TestCase):
         self.assertEqual(result, 'allow')
 
 
+class TestIssue25QosCopyrightPatternAlias(unittest.TestCase):
+    """Tests for Issue #25: QOS.ch copyright with varying year ranges should map to MIT via pattern alias."""
+
+    def setUp(self):
+        """Load actual policy.json including pattern aliases."""
+        policy_path = os.path.join(os.path.dirname(__file__), 'policy.json')
+        with open(policy_path, 'r') as f:
+            policy_data = json.load(f)
+        self.policies = policy_data['policies']
+        self.aliases = policy_data.get('licenseAliases', {})
+        self.pattern_aliases = policy_data.get('licensePatternAliases', {})
+
+    def test_qos_copyright_2004_2023_resolves_to_mit(self):
+        """QOS.ch copyright text with year 2004-2023 should resolve to MIT via pattern alias."""
+        result = find_license_policy(
+            'Copyright (c) 2004-2023 QOS.ch Sarl (Switzerland)',
+            self.policies, self.aliases, pattern_aliases=self.pattern_aliases
+        )
+        self.assertEqual(result, 'allow')
+
+    def test_qos_copyright_2004_2024_resolves_to_mit(self):
+        """QOS.ch copyright text with year 2004-2024 should resolve to MIT via pattern alias."""
+        result = find_license_policy(
+            'Copyright (c) 2004-2024 QOS.ch Sarl (Switzerland)',
+            self.policies, self.aliases, pattern_aliases=self.pattern_aliases
+        )
+        self.assertEqual(result, 'allow')
+
+    def test_qos_copyright_single_year_resolves_to_mit(self):
+        """QOS.ch copyright text with single year should resolve to MIT via pattern alias."""
+        result = find_license_policy(
+            'Copyright (c) 2004 QOS.ch Sarl (Switzerland)',
+            self.policies, self.aliases, pattern_aliases=self.pattern_aliases
+        )
+        self.assertEqual(result, 'allow')
+
+    def test_qos_copyright_with_trailing_text_resolves_to_mit(self):
+        """QOS.ch copyright text with trailing content should resolve to MIT via pattern alias."""
+        result = find_license_policy(
+            'Copyright (c) 2004-2022 QOS.ch Sarl (Switzerland) All rights reserved.',
+            self.policies, self.aliases, pattern_aliases=self.pattern_aliases
+        )
+        self.assertEqual(result, 'allow')
+
+    def test_qos_copyright_case_insensitive_via_pattern(self):
+        """QOS.ch pattern alias should work case-insensitively."""
+        result = find_license_policy(
+            'COPYRIGHT (C) 2004-2023 QOS.CH SARL (SWITZERLAND)',
+            self.policies, self.aliases, pattern_aliases=self.pattern_aliases
+        )
+        self.assertEqual(result, 'allow')
+
+    def test_unrelated_copyright_not_matched(self):
+        """A copyright from a different vendor should NOT be matched by the QOS.ch pattern."""
+        result = find_license_policy(
+            'Copyright (c) 2004-2022 SomeOther Corp (Switzerland)',
+            self.policies, self.aliases, pattern_aliases=self.pattern_aliases
+        )
+        # Should NOT resolve to allow via the QOS.ch pattern
+        self.assertNotEqual(result, 'allow')
+
+
 if __name__ == '__main__':
     unittest.main()
