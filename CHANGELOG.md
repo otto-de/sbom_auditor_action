@@ -2,7 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [1.4.0] - 2026-03-11
+
+### Fixed
+- **`UNKNOWN` licenseConcluded treated as no-license** (#25, PR #29): GitHub Actions packages (e.g. `pkg:githubactions/...`) can have `licenseConcluded: UNKNOWN` in the enriched SBOM. Previously this value fell into the normal resolution flow and triggered a `needs-review` result. Now `UNKNOWN` is treated the same as `NOASSERTION`/`NONE` and follows the no-license path (allowed for GitHub Actions packages by default).
+- **SLF4J License alias to MIT** (#25, PR #30): `org.slf4j` packages with `licenseConcluded: SLF4J License` (as reported by some Maven POMs) were being fuzzy-matched to the unrelated `SL` (Sleepycat) SPDX identifier. Added explicit `licenseAliases` entries `"slf4j license"` → `MIT` and `"slf4j mit license"` → `MIT`.
+- **Fuzzy-matcher false positive for short SPDX names** (#25, PR #31): `SequenceMatcher` returned a ratio of ~0.870 for `'slf4j license'` vs `'sl license'` because `'SL License'` is nearly a substring of `'SLF4J License'`. Added a length-ratio penalty: when the candidate SPDX name is significantly shorter than the input, the required similarity threshold is boosted by `0.5 × (1 − shorter_fraction)`. For the SLF4J/SL pair this raises the effective threshold to ~0.915, above the actual ratio.
+
+### Added
+- **2 new regression tests** (`TestFuzzyMatchLengthRatioGuard`): verify that `'SLF4J License'` no longer matches `SL` and that `'MIT License'` still resolves correctly after the guard is in place.
+- **56 total tests, all passing**
 
 ## [1.2.0] - 2026-03-03
 
