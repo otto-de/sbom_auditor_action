@@ -331,7 +331,7 @@ def audit_component_with_resolution(component, license_policies, package_policie
         }]
 
     # 2. Handle cases with no license
-    if not license_concluded or license_concluded in ['NOASSERTION', 'NONE']:
+    if not license_concluded or license_concluded in ['NOASSERTION', 'NONE', 'UNKNOWN']:
         # For Maven packages, try POM fallback before giving up (Issue #19)
         if purl and purl.startswith('pkg:maven/') and license_resolver:
             logging.info(f"🔍 No license for Maven package {component_name}@{component_version}, trying POM fallback...")
