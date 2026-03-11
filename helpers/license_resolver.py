@@ -183,16 +183,38 @@ class LicenseResolver:
         # Fuzzy matching
         for license_id, license_info in self._spdx_licenses.items():
             normalized_name = self._normalize_license_name(license_info['name'])
-            
+
+            # Length-ratio guard: when the candidate name is significantly shorter
+            # than the input, require a higher similarity score to avoid false
+            # positives caused by short SPDX names being "almost substrings" of
+            # longer inputs (e.g. "SL License" matching "SLF4J License").
+            # We compute the fraction of the shorter string relative to the longer
+            # one and boost the required ratio proportionally.
+            if normalized_name:
+                shorter_frac = min(len(normalized_input), len(normalized_name)) / max(
+                    len(normalized_input), len(normalized_name), 1
+                )
+                # Boost required ratio: 0.5 * (1 - shorter_frac) added on top of
+                # min_ratio.  E.g. for shorter_frac=0.77 the required ratio becomes
+                # 0.8 + 0.5 * 0.23 ≈ 0.915, which rejects the SLF4J→SL false-positive
+                # while still accepting legitimate close matches like EPL-2.0.
+                effective_min_ratio = min_ratio + max(0.0, (1.0 - shorter_frac) * 0.5)
+            else:
+                effective_min_ratio = min_ratio
+
             # Compare against license name
             ratio = SequenceMatcher(None, normalized_input, normalized_name).ratio()
-            if ratio > best_ratio and ratio >= min_ratio:
+            if ratio > best_ratio and ratio >= effective_min_ratio:
                 best_ratio = ratio
                 best_match = license_id
-                
+
             # Compare against license ID (lowercased)
             ratio = SequenceMatcher(None, normalized_input, license_id.lower()).ratio()
-            if ratio > best_ratio and ratio >= min_ratio:
+            id_shorter_frac = min(len(normalized_input), len(license_id)) / max(
+                len(normalized_input), len(license_id), 1
+            )
+            id_effective_min = min_ratio + max(0.0, (1.0 - id_shorter_frac) * 0.5)
+            if ratio > best_ratio and ratio >= id_effective_min:
                 best_ratio = ratio
                 best_match = license_id
         

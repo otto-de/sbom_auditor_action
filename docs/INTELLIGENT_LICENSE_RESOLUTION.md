@@ -1,67 +1,44 @@
 # Intelligent License Resolution
 
-## Überblick
+## Overview
 
-Das SBOM Auditor Action wurde um eine **intelligente License Resolution** erweitert, die automatisch unbekannte oder nicht-standardisierte Lizenz-Namen zu korrekten SPDX-Identifiern auflöst.
+The SBOM Auditor Action includes **intelligent license resolution** that automatically maps non-standard or descriptive license names to their correct SPDX identifiers.
 
 ## Problem
 
-Maven Central und andere Package-Repositories verwenden oft beschreibende Lizenz-Namen anstelle von standardisierten SPDX-Identifiern:
+Maven Central and other package registries often use descriptive license names instead of standardized SPDX identifiers:
 
-- `"Eclipse Public License v2.0"` → sollte `"EPL-2.0"` sein
-- `"The Apache Software License, Version 2.0"` → sollte `"Apache-2.0"` sein  
-- `"BSD 3-Clause License"` → sollte `"BSD-3-Clause"` sein
+- `"Eclipse Public License v2.0"` → should be `"EPL-2.0"`
+- `"The Apache Software License, Version 2.0"` → should be `"Apache-2.0"`
+- `"BSD 3-Clause License"` → should be `"BSD-3-Clause"`
 
-Dies führt dazu, dass diese Lizenzen als "non-standard" oder "needs-review" markiert werden, obwohl sie bekannte und erlaubte Lizenzen sind.
+This previously caused these licenses to be flagged as `needs-review` even though they are well-known and permitted licenses.
 
-## Lösung
+## Solution
 
-### Hybrides Resolution-System
+### Hybrid Resolution System
 
-1. **SPDX Pattern Matching** (Primär)
-   - Lädt die offizielle SPDX License List von GitHub
-   - Normalisiert Lizenz-Namen (entfernt "The", "License", etc.)
-   - Verwendet vordefinierte Regex-Pattern für häufige Fälle
-   - Fuzzy-String-Matching mit konfigurierbarem Threshold
+1. **SPDX Pattern Matching** (primary)
+   - Loads the official SPDX License List from GitHub
+   - Normalizes license names (removes "The", "License", etc.)
+   - Uses predefined regex patterns for common cases
+   - Fuzzy string matching with configurable threshold
 
-2. **AI-Powered Fallback** (Optional)
-   - GitHub Models API für schwierige Fälle
-   - Unterstützt OpenAI, Azure, AWS Bedrock
-   - Nur wenn SPDX-Matching fehlschlägt
+2. **AI-powered Fallback** (optional)
+   - Uses GitHub Models, OpenAI, Azure, or AWS Bedrock for difficult cases
+   - Only triggered when SPDX matching fails
 
-### Neue Dateien
+### Implementation
 
-- **`license_resolver.py`**: Core-Klasse für License Resolution
-- **`enhanced_license_enricher.py`**: Erweiterte SBOM-Anreicherung mit Resolution
-- **`enrich_sbom_enhanced.py`**: Erweiterte Version von `enrich_sbom.py`
-- **`audit_licenses_enhanced.py`**: Erweiterte Version von `audit_licenses.py`
+License resolution is integrated directly into the main scripts:
 
-## Verwendung
+- **`helpers/license_resolver.py`**: Core `LicenseResolver` class
+- **`helpers/enrich_sbom.py`**: Uses `LicenseResolver` during SBOM enrichment
+- **`helpers/audit_licenses.py`**: Uses `LicenseResolver` as a defense-in-depth fallback before marking packages as `NO-LICENSE-FOUND`
 
-### 1. SBOM Enrichment mit License Resolution
+## Usage
 
-```bash
-# Automatische Resolution aktiviert (Standard)
-python enrich_sbom_enhanced.py input.json output.json
-
-# Resolution deaktivieren
-python enrich_sbom_enhanced.py input.json output.json --no-resolve-licenses
-```
-
-### 2. License Audit mit Resolution
-
-```bash  
-# Mit Resolution (Standard)
-python audit_licenses_enhanced.py sbom.json policy.json
-
-# Mit AI Summary
-python audit_licenses_enhanced.py sbom.json policy.json --generate-summary
-
-# Resolution deaktivieren
-python audit_licenses_enhanced.py sbom.json policy.json --no-resolve-licenses
-```
-
-### 3. Standalone License Resolution
+### Standalone License Resolution
 
 ```python
 from license_resolver import LicenseResolver
@@ -72,35 +49,48 @@ result = resolver.resolve_license("Eclipse Public License v2.0")
 print(result)
 # {
 #   'original': 'Eclipse Public License v2.0',
-#   'resolved': 'EPL-2.0', 
+#   'resolved': 'EPL-2.0',
 #   'method': 'spdx_fuzzy',
 #   'confidence': 0.9
 # }
 ```
 
-## Konfiguration
+### SBOM Enrichment (integrated)
 
-### Umgebungsvariablen
+```bash
+python helpers/enrich_sbom.py input.json output.json
+```
 
-- **`GITHUB_TOKEN`**: Für AI-powered Fallback (optional)
+### License Audit (integrated)
 
-### Parameter
+```bash
+python helpers/audit_licenses.py sbom_enriched.json policy.json --markdown
+```
 
-- **`--resolve-licenses`**: Aktiviert Resolution (Standard: true)
-- **`--no-resolve-licenses`**: Deaktiviert Resolution
-- **`--debug`**: Detaillierte Logs
+## Configuration
 
-## Resolution-Methoden
+### Environment Variables
 
-| Methode | Beschreibung | Beispiel |
-|---------|--------------|----------|
-| `spdx_fuzzy` | SPDX Pattern/Fuzzy Matching | `"MIT License"` → `"MIT"` |
-| `ai_assisted` | AI-powered Recognition | Komplexe/ungewöhnliche Namen |
-| `unresolved` | Keine Resolution möglich | Bleibt "needs-review" |
+- **`GITHUB_TOKEN`**: Used for AI-powered fallback when `ai_provider` is `github` (optional)
 
-## Erweiterte Metadaten
+### Parameters
 
-Die Resolution fügt zusätzliche Metadaten zu SBOM-Paketen hinzu:
+| Parameter | Description |
+|-----------|-------------|
+| `--debug` | Enable detailed logging |
+
+## Resolution Methods
+
+| Method | Description | Example |
+|--------|-------------|---------|
+| `spdx_fuzzy` | SPDX pattern / fuzzy matching | `"MIT License"` → `"MIT"` |
+| `ai_assisted` | AI-powered recognition | Complex or unusual names |
+| `maven_pom_fallback` | Direct Maven Central POM lookup | Maven packages with empty registry data |
+| `unresolved` | No resolution possible | Stays `needs-review` |
+
+## Enrichment Metadata
+
+Resolution adds additional metadata to SBOM packages:
 
 ```json
 {
@@ -119,97 +109,30 @@ Die Resolution fügt zusätzliche Metadaten zu SBOM-Paketen hinzu:
 
 ## Pattern Recognition
 
-### Häufige Pattern
+### Common Patterns
 
 - Apache: `apache.*license.*v?\.?2\.?0?` → `Apache-2.0`
 - Eclipse: `eclipse.*public.*license.*v?\.?2\.?0?` → `EPL-2.0`
-- MIT: `mit.*license` → `MIT`  
+- MIT: `mit.*license` → `MIT`
 - BSD: `bsd.*3.*clause` → `BSD-3-Clause`
 - GPL: `gnu.*general.*public.*license.*v?\.?3` → `GPL-3.0-only`
 
-### Normalisierung
+### Normalization Steps
 
-1. Lowercase-Konvertierung
-2. Entfernung von "The", Kommas, Klammern
-3. Vereinheitlichung von "License"/"Licence"
-4. Version-Pattern-Normalisierung (`v2.0`, `version 2.0` → `v2.0`)
+1. Lowercase conversion
+2. Removal of "The", commas, brackets
+3. Unification of "License"/"Licence"
+4. Version pattern normalization (`v2.0`, `version 2.0` → `v2.0`)
 
-## Statistiken und Reporting
+## Performance
 
-```
-📊 License Resolution Report:
-========================================
-   spdx_fuzzy: 156 (87.2%)
-   ai_assisted: 12 (6.7%)  
-   unresolved: 11 (6.1%)
-   Total: 179
-```
-
-## Migration
-
-### Upgrade zu Enhanced Versions
-
-```bash
-# Automatisches Upgrade
-python upgrade_license_resolution.py
-
-# Rollback
-python upgrade_license_resolution.py --rollback
-```
-
-### Backward Compatibility
-
-- Bestehende Scripts funktionieren weiterhin
-- Resolution ist standardmäßig aktiviert
-- Kann mit `--no-resolve-licenses` deaktiviert werden
+- **SPDX data**: ~703 licenses, loaded and cached once per run
+- **Pattern matching**: ~1ms per license
+- **AI fallback**: ~500ms per call (only when needed)
+- **LRU cache**: Repeated lookups are instant
 
 ## Testing
 
 ```bash
-# Test License Resolution
-python license_resolver.py
-
-# Test Integration  
-python test_license_resolution.py
-
-# Test Enhanced Enrichment
-python enhanced_license_enricher.py
+python3 -m unittest helpers/test_license_resolution.py
 ```
-
-## Performance
-
-- **SPDX-Daten**: 703 Lizenzen, einmalig geladen und gecacht
-- **Pattern Matching**: ~1ms pro Lizenz
-- **AI Fallback**: ~500ms pro Aufruf (nur bei Bedarf)
-- **Cache**: LRU-Cache für wiederholte Anfragen
-
-## Vorteile
-
-1. **Automatische Compliance**: Weniger "needs-review" Fälle
-2. **Standardisierung**: Konsistente SPDX-Identifiers
-3. **Hybrid-Ansatz**: Robust und zuverlässig
-4. **Konfigurierbar**: Kann nach Bedarf aktiviert/deaktiviert werden  
-5. **Transparent**: Vollständige Nachverfolgung der Resolution
-6. **Performant**: Intelligente Caching-Strategien
-
-## Beispiel-Output
-
-```
-🧪 Testing License Resolver
-==================================================
-📝 'Eclipse Public License v2.0'
-   → EPL-2.0 (spdx_fuzzy, confidence: 0.9)
-
-📝 'The Apache Software License, Version 2.0'  
-   → Apache-2.0 (spdx_fuzzy, confidence: 0.9)
-
-📝 'BSD 3-Clause License'
-   → BSD-3-Clause (spdx_fuzzy, confidence: 0.9)
-```
-
-## Nächste Schritte
-
-1. **Weitere Pattern**: Ergänzung um zusätzliche häufige Lizenz-Varianten
-2. **Learning System**: Automatisches Lernen aus erfolgreichen Resolutions
-3. **Custom Mappings**: Benutzer-definierte Mappings für spezielle Fälle
-4. **Confidence Tuning**: Optimierung der Confidence-Thresholds

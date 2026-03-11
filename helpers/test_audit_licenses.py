@@ -17,6 +17,7 @@ from audit_licenses import (
     find_license_policy,
     audit_component_with_resolution
 )
+from spdx_expression_parser import SPDXExpressionParser
 from license_resolver import LicenseResolver
 
 # Suppress logging during tests
@@ -728,6 +729,78 @@ class TestIssue25QosCopyrightPatternAlias(unittest.TestCase):
         )
         # Should NOT resolve to allow via the QOS.ch pattern
         self.assertNotEqual(result, 'allow')
+
+    def test_qos_copyright_does_not_consume_spdx_operator(self):
+        """QOS.ch pattern must NOT greedily consume a trailing AND/OR SPDX expression.
+
+        If the pattern matched 'Copyright ... AND GPL-3.0-only' as a whole, it would
+        silently drop the GPL term and produce a false-positive allow.
+        """
+        parser = SPDXExpressionParser(
+            license_aliases=self.aliases,
+            pattern_aliases=self.pattern_aliases
+        )
+        result = parser._apply_aliases_to_expression(
+            'Copyright (c) 2004-2023 QOS.ch Sarl (Switzerland) AND GPL-3.0-only'
+        )
+        # The GPL term must NOT have been consumed by the QOS.ch pattern
+        self.assertIn('GPL-3.0-only', result)
+
+
+class TestFuzzyMatchLengthRatioGuard(unittest.TestCase):
+    """Regression tests for the length-ratio guard in LicenseResolver._fuzzy_match_spdx.
+
+    The guard prevents short SPDX names (e.g. 'SL License') from matching
+    substantially longer input strings (e.g. 'SLF4J License') just because
+    they share a common short prefix.
+    """
+
+    def setUp(self):
+        # Minimal SPDX list that reproduces the SLF4J → SL false-positive.
+        spdx_licenses = {
+            'SL': {
+                'name': 'SL License',
+                'id': 'SL',
+                'deprecated': False,
+                'osi_approved': False,
+                'see_also': [],
+            },
+            'MIT': {
+                'name': 'MIT License',
+                'id': 'MIT',
+                'deprecated': False,
+                'osi_approved': True,
+                'see_also': [],
+            },
+        }
+        self._spdx_patcher = patch.object(
+            LicenseResolver,
+            '_fetch_spdx_data',
+            return_value=(spdx_licenses, {}),
+        )
+        self._spdx_patcher.start()
+        self.resolver = LicenseResolver()
+
+    def tearDown(self):
+        self._spdx_patcher.stop()
+
+    def test_slf4j_license_does_not_match_sl(self):
+        """'SLF4J License' must NOT fuzzy-match to 'SL' (Sleepycat License).
+
+        Before the length-ratio guard was introduced SequenceMatcher returned
+        a ratio of ~0.870 for ('slf4j license', 'sl license') which exceeded
+        the 0.8 threshold and produced a false-positive SL match.
+        """
+        result = self.resolver._fuzzy_match_spdx('SLF4J License')
+        self.assertNotEqual(
+            result, 'SL',
+            "SLF4J License must not resolve to the unrelated SL (Sleepycat) license"
+        )
+
+    def test_mit_license_still_matches_mit(self):
+        """'MIT License' should still resolve correctly after the guard is in place."""
+        result = self.resolver._fuzzy_match_spdx('MIT License')
+        self.assertEqual(result, 'MIT')
 
 
 if __name__ == '__main__':

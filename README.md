@@ -67,6 +67,7 @@ To use this action in your workflow, add the following step:
 | `internal_dependency_pattern` | A newline-separated list of regex patterns to identify internal dependencies that should be skipped from the audit. | `false`  | `''` (no internal patterns by default)                  |
 | `enable_cache`        | Enable caching for SBOM enrichment to speed up subsequent runs (recommended for organizations).                  | `false`  | `'true'`                                                 |
 | `cache_ttl_hours`     | Cache time-to-live in hours for package data (default: 168 = 7 days).                                          | `false`  | `'168'`                                                  |
+| `debug`               | Enable debug logging for detailed troubleshooting output.                                                       | `false`  | `'false'`                                                |
 
 **Note:** Parameters marked with `*` are conditionally required based on the selected `ai_provider`:
 - `azure_endpoint` and `azure_deployment` are required when `ai_provider` is `'azure'`
@@ -87,9 +88,9 @@ To use this action in your workflow, add the following step:
 
 ## AI-Assisted Summary
 
-This action can use the OpenAI API to generate an AI-assisted summary of the license audit report. This provides a high-level overview of the license landscape, potential risks, and recommendations.
+This action can generate an AI-assisted summary of the license audit report using OpenAI, Azure OpenAI, AWS Bedrock, or GitHub Models. This provides a high-level overview of the license landscape, potential risks, and recommendations.
 
-To enable this feature, you must provide an `openai_api_key`.
+To enable this feature, provide an `openai_api_key` (for OpenAI or Azure) or configure the appropriate credentials for your chosen `ai_provider`. See the [AI-Assisted Summary Examples](#ai-assisted-summary-examples) section below for provider-specific configuration.
 
 ### Example Summary
 
@@ -121,7 +122,7 @@ The action supports multiple AI providers for generating intelligent license com
     github_token: ${{ secrets.GITHUB_TOKEN }}
     openai_api_key: ${{ secrets.OPENAI_API_KEY }}
     ai_provider: 'openai'
-    ai_model_name: 'gpt-4'  # Optional: defaults to gpt-3.5-turbo
+    ai_model_name: 'gpt-4'  # Optional: defaults to gpt-3.5-turbo (OpenAI provider default)
 ```
 
 ### Azure OpenAI
@@ -197,7 +198,7 @@ jobs:
 
       - name: Run SBOM Auditor
         id: sbom-audit
-        uses: otto-de/sbom_auditor_action@v0.4.1
+        uses: otto-de/sbom_auditor_action@v1
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           fail_hard: true
@@ -344,7 +345,7 @@ To skip internal dependencies from the audit, you can use the `internal_dependen
 
 ```yaml
 - name: Run SBOM Auditor and Skip Internal Dependencies
-  uses: otto-de/sbom_auditor_action@v0.4.1
+  uses: otto-de/sbom_auditor_action@v1
   with:
     github_token: ${{ secrets.GITHUB_TOKEN }}
     internal_dependency_pattern: |
@@ -357,11 +358,11 @@ To skip internal dependencies from the audit, you can use the `internal_dependen
     debug: false
 ```
 
-**Example for Otto teams (v0.4.1+):**
+**Example for Otto teams:**
 
 ```yaml
-- name: Run SBOM Auditor for Otto Project  
-  uses: otto-de/sbom_auditor_action@v0.4.1
+- name: Run SBOM Auditor for Otto Project
+  uses: otto-de/sbom_auditor_action@v1
   with:
     github_token: ${{ secrets.GITHUB_TOKEN }}
     internal_dependency_pattern: |

@@ -299,7 +299,7 @@ class SPDXExpressionParser:
         # Apply pattern aliases first (longest pattern wins by iteration order — sort by pattern length desc)
         if self._compiled_pattern_aliases:
             for pattern, spdx_id in self._compiled_pattern_aliases:
-                new_result = pattern.sub(spdx_id, result, flags=re.IGNORECASE) if not pattern.flags & re.IGNORECASE else pattern.sub(spdx_id, result)
+                new_result = pattern.sub(spdx_id, result)
                 if new_result != result:
                     self.logger.debug(f"🔄 Applied pattern alias in expression: '{pattern.pattern}' → '{spdx_id}'")
                     result = new_result

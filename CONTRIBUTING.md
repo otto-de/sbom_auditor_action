@@ -38,7 +38,7 @@ To get started with development, you'll need Python 3.9 or newer.
     ```
 4.  **Install the dependencies**: The action's dependencies are listed in `action.yml`. You can install them using pip:
     ```sh
-    pip install requests tqdm openai
+    pip install requests tqdm openai boto3
     ```
 
 ## Running Tests
