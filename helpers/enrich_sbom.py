@@ -189,25 +189,27 @@ def enrich_sbom_with_intelligent_resolution(input_sbom_path, output_sbom_path, c
                 skipped_packages["no_purl"].append(pkg.get('name', 'Unknown'))
             continue
 
+        normalized_purl = purl.split('?')[0]
+
         # Parse package URL for deps.dev query
         try:
-            parsed_purl = urllib.parse.urlparse(purl)
+            parsed_purl = urllib.parse.urlparse(normalized_purl)
             
             # Skip internal and GitHub Actions packages
-            if 'github.com' in purl and 'github.com/actions' not in purl:
+            if 'github.com' in normalized_purl and 'github.com/actions' not in normalized_purl:
                 skipped += 1
-                if purl not in skipped_packages["internal"]:
-                    skipped_packages["internal"].append(purl)
+                if normalized_purl not in skipped_packages["internal"]:
+                    skipped_packages["internal"].append(normalized_purl)
                 continue
                     
-            if 'github.com/actions' in purl:
+            if 'github.com/actions' in normalized_purl:
                 skipped += 1
-                if purl not in skipped_packages["github_actions"]:
-                    skipped_packages["github_actions"].append(purl)
+                if normalized_purl not in skipped_packages["github_actions"]:
+                    skipped_packages["github_actions"].append(normalized_purl)
                 continue
 
             # Parse PURL components
-            purl_parts = purl.split('/')
+            purl_parts = normalized_purl.split('/')
             if len(purl_parts) < 2:
                 continue
                 
