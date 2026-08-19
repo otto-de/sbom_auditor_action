@@ -4120,7 +4120,22 @@
         "copyright (c) 2004-2022 qos.ch sarl (switzerland)": "MIT",
 
         "slf4j license": "MIT",
-        "slf4j mit license": "MIT"
+        "slf4j mit license": "MIT",
+
+        "python 2": "Python-2.0",
+        "python 2.0": "Python-2.0",
+        "python software foundation license": "Python-2.0",
+        "psf": "Python-2.0",
+        "psf license": "Python-2.0",
+
+        "saxpath license": "Saxpath",
+
+        "zpl": "ZPL-2.1",
+        "zpl 2.0": "ZPL-2.0",
+        "zpl 2.1": "ZPL-2.1",
+        "zope public license": "ZPL-2.1",
+        "zope public license 2.0": "ZPL-2.0",
+        "zope public license 2.1": "ZPL-2.1"
     },
     "licensePatternAliases": {
         "_comment": "Regex patterns (Python re syntax, case-insensitive) matched against the full license string. Use this for licenses where the exact text varies (e.g. year ranges). Keys are Python regex patterns.",
