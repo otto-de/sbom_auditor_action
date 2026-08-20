@@ -4109,6 +4109,12 @@
         "bsd new license": "BSD-3-Clause",
         "new bsd": "BSD-3-Clause",
         "the (new) bsd license": "BSD-3-Clause",
+        "bsd-style": "BSD-3-Clause",
+        "bsd style": "BSD-3-Clause",
+        "bsd-like": "BSD-3-Clause",
+        "bsd like": "BSD-3-Clause",
+        "bsd-style license": "BSD-3-Clause",
+        "bsd-like license": "BSD-3-Clause",
         
         "public domain, per creative commons cc0": "CC0-1.0",
         "public domain, per creative commons cc0 and bsd-2-clause": "CC0-1.0",
