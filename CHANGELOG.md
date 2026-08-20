@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.5.0] - 2026-08-20
+
+### Fixed
+- **Normalize PURL before processing** (#32): PURLs with query parameters (e.g. `pkg:maven/group/artifact@1.0?type=jar`) caused failed lookups against deps.dev and Maven Central because the query string was treated as part of the version. Query parameters are now stripped before any processing. Package policy matching already handled this case; enrichment now does too.
+- **LGPL alias for human-readable string** (#34): `"Lesser General Public License (LGPL)"` was not resolved and could trigger a `needs-review` result. Added alias → `LGPL-2.1-only`.
+- **BSD-style / BSD-like license aliases** (#26, #36): Packages reporting their license as `BSD-style`, `BSD-like`, or variants were blocked despite BSD-3-Clause being approved. Added aliases for all common forms → `BSD-3-Clause`.
+- **Missing aliases for legal-approved licenses** (#14, #35): The following licenses were already approved in policy but lacked alias entries, causing non-standard license strings from SBOMs to fall through to `needs-review`:
+  - `Python-2.0`: aliases for `python 2`, `python 2.0`, `psf`, `psf license`, `python software foundation license`
+  - `Saxpath`: alias for `saxpath license`
+  - `ZPL-2.0` / `ZPL-2.1`: aliases for `zpl`, `zope public license`, `zope public license 2.0/2.1`
+
+### Changed
+- **Upgrade `actions/setup-python` from v4 to v5** (#33, #37): Eliminates the Node.js 20 deprecation warning (`"Node.js 20 is deprecated ... being forced to run on Node.js 24"`) in CI and the internal `_audit_sbom.yaml` workflow.
+
 ## [1.4.0] - 2026-03-11
 
 ### Fixed
