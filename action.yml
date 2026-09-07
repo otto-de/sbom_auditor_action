@@ -75,13 +75,13 @@ runs:
   using: 'composite'
   steps:
     - name: Set up Python
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@7f4fc3e22c37d6ff65e88745f38bd3157c663f7c # v4.9.1
       with:
         python-version: '3.x'
 
     - name: Cache setup for SBOM enrichment
       if: inputs.enable_cache == 'true'
-      uses: actions/cache@v4
+      uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
       with:
         path: ./sbom_cache
         key: sbom-cache-${{ github.repository_owner }}-${{ hashFiles('**/requirements.txt', '**/package.json', '**/pom.xml', '**/Cargo.toml', '**/go.mod') }}-${{ inputs.cache_ttl_hours }}
@@ -119,12 +119,12 @@ runs:
       run: |
         # Enable debug logging for troubleshooting
         export PYTHONPATH="${{ github.action_path }}/helpers:$PYTHONPATH"
-        
+
         DEBUG_ARG=""
         if [[ "${{ inputs.debug }}" == "true" ]]; then
           DEBUG_ARG="--debug"
         fi
-        
+
         if [ "${{ inputs.enable_cache }}" = "true" ]; then
           python ${{ github.action_path }}/helpers/enrich_sbom.py sbom.json sbom_enriched.json --cache-ttl-hours ${{ inputs.cache_ttl_hours }} $DEBUG_ARG
         else
@@ -142,7 +142,7 @@ runs:
       shell: bash
       run: |
         AUDIT_EXIT_CODE=0
-        
+
         # Determine which license policy file to use
         POLICY_FILE="${{ inputs.policy_path }}"
         if [[ -z "$POLICY_FILE" ]]; then
@@ -158,7 +158,7 @@ runs:
         if [[ -z "$PACKAGE_POLICY_FILE" ]]; then
           PACKAGE_POLICY_FILE="${{ github.action_path }}/helpers/package_policy.json"
         fi
-        
+
         # Construct the package policy argument, but only if the file actually exists
         PACKAGE_POLICY_ARG=""
         if [[ -f "$PACKAGE_POLICY_FILE" ]]; then
@@ -178,19 +178,19 @@ runs:
 
         # Construct AI provider arguments
         AI_PROVIDER_ARGS="--ai-provider ${{ inputs.ai_provider }}"
-        
+
         if [[ -n "${{ inputs.azure_endpoint }}" ]]; then
           AI_PROVIDER_ARGS="$AI_PROVIDER_ARGS --azure-endpoint ${{ inputs.azure_endpoint }}"
         fi
-        
+
         if [[ -n "${{ inputs.azure_deployment }}" ]]; then
           AI_PROVIDER_ARGS="$AI_PROVIDER_ARGS --azure-deployment ${{ inputs.azure_deployment }}"
         fi
-        
+
         if [[ -n "${{ inputs.aws_region }}" ]]; then
           AI_PROVIDER_ARGS="$AI_PROVIDER_ARGS --aws-region ${{ inputs.aws_region }}"
         fi
-        
+
         if [[ -n "${{ inputs.ai_model_name }}" ]]; then
           AI_PROVIDER_ARGS="$AI_PROVIDER_ARGS --ai-model-name ${{ inputs.ai_model_name }}"
         fi
@@ -221,21 +221,21 @@ runs:
         fi
 
         eval "python ${{ github.action_path }}/helpers/audit_licenses.py sbom_enriched.json $POLICY_FILE --markdown $DEBUG_ARG $PACKAGE_POLICY_ARG $OPENAI_ARG $AI_PROVIDER_ARGS $BASE_POLICY_ARG --generate-summary" > license-audit-report.md || AUDIT_EXIT_CODE=$?
-        
+
         # The audit script now writes directly to GITHUB_STEP_SUMMARY
         cat license-audit-report.md >> $GITHUB_STEP_SUMMARY
         echo "AUDIT_EXIT_CODE=${AUDIT_EXIT_CODE}" >> $GITHUB_OUTPUT
 
     - name: Upload SBOM artifacts
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
       with:
         name: sbom-enriched
         path: sbom_enriched.json
         compression-level: 6
         retention-days: 30
-        
+
     - name: Upload license artifacts
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
       with:
         name: license-artifacts
         path: |
@@ -243,7 +243,7 @@ runs:
           license-audit-report.md
         compression-level: 6
         retention-days: 30
-      
+
     - name: Check audit result
       if: steps.audit_licenses.outputs.AUDIT_EXIT_CODE != '0' && inputs.fail_hard == 'true'
       shell: bash
