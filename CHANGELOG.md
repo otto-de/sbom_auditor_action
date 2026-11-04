@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.5.1] - 2026-11-04
+
+### Fixed
+- **Migrate to GitHub's asynchronous SBOM API** (#42): The synchronous endpoint `GET /repos/{owner}/{repo}/dependency-graph/sbom` is shut down by GitHub on November 13, 2026. The action now requests the SBOM via `dependency-graph/sbom/generate-report` and polls the returned `fetch-report/{uuid}` URL until the report is ready (new `helpers/fetch_sbom.py`).
+  - Polling uses `Retry-After` if present, otherwise exponential backoff capped at 15s; overall wait is limited by the new input `sbom_timeout_seconds` (default `300`).
+  - The GitHub token is not forwarded to the temporary download URL.
+  - Respects `GITHUB_API_URL` (GitHub Enterprise Server, if the endpoint is available there).
+  - Clear error messages for `403`/`404` (Dependency Graph disabled or missing `contents: read`) and timeouts, replacing the previous `grep "Not Found"` check.
+  - The SBOM entry count log now reports the correct number of packages and relationships (previously always `0` due to the `{"sbom": ...}` wrapper of the old endpoint).
+
+### Added
+- **16 unit tests** for the asynchronous fetch flow (`helpers/test_fetch_sbom.py`).
+
 ## [1.5.0] - 2026-08-20
 
 ### Fixed

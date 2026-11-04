@@ -66,17 +66,39 @@ jobs:
 
       - name: Get SBOM from GitHub API
         run: |
-          gh api /repos/${{ github.event.repository.owner.login }}/${{ github.event.repository.name }}/dependency-graph/sbom > sbom.json
+          # Asynchronous SBOM API: request generation, then poll until GitHub redirects to the report (#42).
+          REPO="${{ github.event.repository.owner.login }}/${{ github.event.repository.name }}"
+          API_VERSION_HEADER="X-GitHub-Api-Version: 2026-03-10"
+          if ! SBOM_URL=$(gh api -H "$API_VERSION_HEADER" "/repos/$REPO/dependency-graph/sbom/generate-report" --jq .sbom_url); then
+            echo "Error: Failed to request SBOM. It's possible the Dependency Graph is not enabled for this repository."
+            exit 1
+          fi
+          DOWNLOAD_URL=""
+          for attempt in $(seq 1 60); do
+            STATUS=$(curl -s -o /dev/null -D headers.txt -w "%{http_code}" \
+              -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" -H "$API_VERSION_HEADER" \
+              "$SBOM_URL")
+            if [[ "$STATUS" == "302" ]]; then
+              DOWNLOAD_URL=$(grep -i '^location:' headers.txt | sed 's/^[Ll]ocation: *//' | tr -d '\r')
+              break
+            elif [[ "$STATUS" == "201" || "$STATUS" == "202" ]]; then
+              echo "SBOM is still being generated (attempt $attempt)..."
+              sleep 5
+            else
+              echo "Error: Unexpected status $STATUS while fetching SBOM report."
+              exit 1
+            fi
+          done
+          if [[ -z "$DOWNLOAD_URL" ]]; then
+            echo "Error: Timed out waiting for GitHub to generate the SBOM."
+            exit 1
+          fi
+          curl -sSf -o sbom.json "$DOWNLOAD_URL"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Check for download error
         run: |
-          if grep -q '"message": "Not Found"' sbom.json; then
-            echo "Error: Failed to download SBOM. It's possible the Dependency Graph is not enabled for this repository."
-            cat sbom.json
-            exit 1
-          fi
           echo "SBOM file successfully downloaded."
           echo "--- SBOM HEAD ---"
           head -20 sbom.json
