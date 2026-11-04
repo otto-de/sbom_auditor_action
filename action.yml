@@ -75,13 +75,13 @@ runs:
   using: 'composite'
   steps:
     - name: Set up Python
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v6
       with:
         python-version: '3.x'
 
     - name: Cache setup for SBOM enrichment
       if: inputs.enable_cache == 'true'
-      uses: actions/cache@v4
+      uses: actions/cache@v6
       with:
         path: ./sbom_cache
         key: sbom-cache-${{ github.repository_owner }}-${{ hashFiles('**/requirements.txt', '**/package.json', '**/pom.xml', '**/Cargo.toml', '**/go.mod') }}-${{ inputs.cache_ttl_hours }}
@@ -227,7 +227,7 @@ runs:
         echo "AUDIT_EXIT_CODE=${AUDIT_EXIT_CODE}" >> $GITHUB_OUTPUT
 
     - name: Upload SBOM artifacts
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v6
       with:
         name: sbom-enriched
         path: sbom_enriched.json
@@ -235,7 +235,7 @@ runs:
         retention-days: 30
         
     - name: Upload license artifacts
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v6
       with:
         name: license-artifacts
         path: |

@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.0.0] - Unreleased
+
+### Changed
+- Upgrade `actions/cache` to v6, `actions/setup-python` to v6, and `actions/upload-artifact` to v6 to use Node.js 24.
+- Publish as a new `v2` major tag; leave `v1` unchanged for existing users.
+
+### Requirements
+- Self-hosted Actions runners must be version `2.327.1` or later.
+
 ## [1.5.0] - 2026-08-20
 
 ### Fixed

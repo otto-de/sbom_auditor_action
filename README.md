@@ -13,7 +13,7 @@ To use this action in your workflow, add the following step:
 
 ```yaml
 - name: Audit SBOM
-  uses: otto-de/sbom_auditor_action@v1
+  uses: otto-de/sbom_auditor_action@v2
   with:
     # GitHub token with permissions to read the dependency graph.
     github_token: ${{ secrets.GITHUB_TOKEN }}
@@ -48,6 +48,8 @@ To use this action in your workflow, add the following step:
     #   com.my-company.*
     #   de.my-other-company.*
 ```
+
+Version `v2` uses Node.js 24-based actions. Self-hosted runners must be version `2.327.1` or later. The `v1` tag is intentionally unchanged so existing `@v1` users retain their current behavior.
 
 ## Inputs
 
@@ -117,7 +119,7 @@ The action supports multiple AI providers for generating intelligent license com
 
 ```yaml
 - name: SBOM Audit with OpenAI
-  uses: otto-de/sbom_auditor_action@v1
+  uses: otto-de/sbom_auditor_action@v2
   with:
     github_token: ${{ secrets.GITHUB_TOKEN }}
     openai_api_key: ${{ secrets.OPENAI_API_KEY }}
@@ -129,7 +131,7 @@ The action supports multiple AI providers for generating intelligent license com
 
 ```yaml
 - name: SBOM Audit with Azure OpenAI
-  uses: otto-de/sbom_auditor_action@v1
+  uses: otto-de/sbom_auditor_action@v2
   with:
     github_token: ${{ secrets.GITHUB_TOKEN }}
     openai_api_key: ${{ secrets.AZURE_OPENAI_API_KEY }}
@@ -142,7 +144,7 @@ The action supports multiple AI providers for generating intelligent license com
 
 ```yaml
 - name: SBOM Audit with AWS Bedrock
-  uses: otto-de/sbom_auditor_action@v1
+  uses: otto-de/sbom_auditor_action@v2
   with:
     github_token: ${{ secrets.GITHUB_TOKEN }}
     ai_provider: 'bedrock'
@@ -161,7 +163,7 @@ The action supports multiple AI providers for generating intelligent license com
 
 ```yaml
 - name: SBOM Audit with GitHub Models
-  uses: otto-de/sbom_auditor_action@v1
+  uses: otto-de/sbom_auditor_action@v2
   with:
     github_token: ${{ secrets.GITHUB_TOKEN }}
     ai_provider: 'github'
@@ -198,7 +200,7 @@ jobs:
 
       - name: Run SBOM Auditor
         id: sbom-audit
-        uses: otto-de/sbom_auditor_action@v1
+        uses: otto-de/sbom_auditor_action@v2
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           fail_hard: true
@@ -207,7 +209,7 @@ jobs:
           debug: false
 
       - name: Upload Audit Artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: sbom-audit-artifacts
           path: |
@@ -248,7 +250,7 @@ Create a custom policy file that **adds exceptions** to the default policies. Th
 
 ```yaml
 - name: Run SBOM Auditor
-  uses: otto-de/sbom_auditor_action@v1
+  uses: otto-de/sbom_auditor_action@v2
   with:
     github_token: ${{ secrets.GITHUB_TOKEN }}
     policy_path: '.github/license_policy.json'
@@ -261,7 +263,7 @@ If you want to use **only your own policies** without the built-in defaults:
 
 ```yaml
 - name: Run SBOM Auditor
-  uses: otto-de/sbom_auditor_action@v1
+  uses: otto-de/sbom_auditor_action@v2
   with:
     github_token: ${{ secrets.GITHUB_TOKEN }}
     policy_path: '.github/license_policy.json'
@@ -345,7 +347,7 @@ To skip internal dependencies from the audit, you can use the `internal_dependen
 
 ```yaml
 - name: Run SBOM Auditor and Skip Internal Dependencies
-  uses: otto-de/sbom_auditor_action@v1
+  uses: otto-de/sbom_auditor_action@v2
   with:
     github_token: ${{ secrets.GITHUB_TOKEN }}
     internal_dependency_pattern: |
@@ -362,7 +364,7 @@ To skip internal dependencies from the audit, you can use the `internal_dependen
 
 ```yaml
 - name: Run SBOM Auditor for Otto Project
-  uses: otto-de/sbom_auditor_action@v1
+  uses: otto-de/sbom_auditor_action@v2
   with:
     github_token: ${{ secrets.GITHUB_TOKEN }}
     internal_dependency_pattern: |
@@ -401,7 +403,7 @@ jobs:
 
       - name: Run SBOM Auditor
         id: sbom-audit
-        uses: otto-de/sbom_auditor_action@v1
+        uses: otto-de/sbom_auditor_action@v2
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           fail_hard: false # Set to false to allow committing the report even with violations
@@ -442,7 +444,7 @@ The action uses a **hybrid caching strategy** for maximum performance:
 #### Repository-Level Cache (GitHub Actions)
 ```yaml
 # Automatic per-repository caching
-- uses: actions/cache@v4
+- uses: actions/cache@v6
   with:
     path: ./sbom_cache
     key: sbom-cache-${{ github.repository_owner }}-${{ hashFiles('**/*.json') }}
@@ -479,7 +481,7 @@ This creates a private repository `otto-de/sbom-cache` that stores cache data.
 
 ```yaml
 - name: SBOM Audit with Organizational Caching
-  uses: otto-de/sbom_auditor_action@v1
+  uses: otto-de/sbom_auditor_action@v2
   with:
     github_token: ${{ secrets.GITHUB_TOKEN }}  # Used for org-wide cache access
     enable_cache: true          # Enable caching (default: true)
@@ -537,7 +539,7 @@ To disable caching (not recommended for production):
 
 ```yaml
 - name: SBOM Audit without Caching
-  uses: otto-de/sbom_auditor_action@v1
+  uses: otto-de/sbom_auditor_action@v2
   with:
     github_token: ${{ secrets.GITHUB_TOKEN }}
     enable_cache: false
