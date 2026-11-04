@@ -52,6 +52,10 @@ inputs:
     description: 'Cache time-to-live in hours for package data (default: 168 = 7 days).'
     required: false
     default: '168'
+  sbom_timeout_seconds:
+    description: 'Maximum time in seconds to wait for GitHub to generate the SBOM (asynchronous SBOM API).'
+    required: false
+    default: '300'
   debug:
     description: 'Enable debug logging for detailed troubleshooting output.'
     required: false
@@ -98,21 +102,13 @@ runs:
     - name: Get SBOM from GitHub API
       shell: bash
       run: |
-        gh api /repos/${{ github.repository }}/dependency-graph/sbom > sbom.json
-      env:
-        GH_TOKEN: ${{ inputs.github_token }}
-
-    - name: Check for download error
-      shell: bash
-      run: |
-        if grep -q '"message": "Not Found"' sbom.json; then
-          echo "Error: Failed to download SBOM. It\'s possible the Dependency Graph is not enabled for this repository."
-          cat sbom.json
-          exit 1
+        DEBUG_ARG=""
+        if [[ "${{ inputs.debug }}" == "true" ]]; then
+          DEBUG_ARG="--debug"
         fi
-        echo "SBOM file successfully downloaded."
-        echo "--- SBOM Entry Count (packages/components) ---"
-        python3 -c "import json; d=json.load(open('sbom.json')); print('packages:', len(d.get('packages', []))); print('components:', len(d.get('components', [])))"
+        python ${{ github.action_path }}/helpers/fetch_sbom.py "${{ github.repository }}" sbom.json --timeout "${{ inputs.sbom_timeout_seconds }}" $DEBUG_ARG
+      env:
+        GITHUB_TOKEN: ${{ inputs.github_token }}
 
     - name: Enrich SBOM
       shell: bash
