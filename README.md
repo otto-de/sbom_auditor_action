@@ -67,6 +67,8 @@ To use this action in your workflow, add the following step:
 | `internal_dependency_pattern` | A newline-separated list of regex patterns to identify internal dependencies that should be skipped from the audit. | `false`  | `''` (no internal patterns by default)                  |
 | `enable_cache`        | Enable caching for SBOM enrichment to speed up subsequent runs (recommended for organizations).                  | `false`  | `'true'`                                                 |
 | `cache_ttl_hours`     | Cache time-to-live in hours for package data (default: 168 = 7 days).                                          | `false`  | `'168'`                                                  |
+| `sarif_upload`        | If `true`, denied and needs-review licenses are uploaded as code scanning alerts (Security tab). See [License Findings as Code Scanning Alerts](#license-findings-as-code-scanning-alerts). | `false`  | `'false'`                                                |
+| `sarif_category`      | Code scanning category for the uploaded SARIF results.                                                          | `false`  | `'sbom-license-audit'`                                   |
 | `debug`               | Enable debug logging for detailed troubleshooting output.                                                       | `false`  | `'false'`                                                |
 
 **Note:** Parameters marked with `*` are conditionally required based on the selected `ai_provider`:
@@ -85,6 +87,35 @@ To use this action in your workflow, add the following step:
 | `license-audit-report`   | Path to the license audit report in markdown format.                     |
 | `sbom_enriched`          | Path to the enriched SBOM file.                                          |
 | `licenses_md`            | Path to the collected license texts.                                     |
+| `sarif_file`             | Path to the SARIF report with license findings (only with `sarif_upload: 'true'`). |
+
+## License Findings as Code Scanning Alerts
+
+With `sarif_upload: 'true'` the action writes every denied or needs-review package to a SARIF file (`license-audit.sarif`) and uploads it with `github/codeql-action/upload-sarif`. The findings then appear as code scanning alerts in the repository's **Security** tab and in pull requests, where they can be triaged, dismissed (e.g. "won't fix" after legal approval), and tracked organization-wide.
+
+```yaml
+permissions:
+  contents: read
+  security-events: write   # required for the SARIF upload
+
+steps:
+  - uses: actions/checkout@v4   # recommended: lets alerts point to the manifest line
+  - uses: otto-de/sbom_auditor_action@v1
+    with:
+      sarif_upload: 'true'
+```
+
+| Rule | Level | Raised for |
+| ---- | ----- | ---------- |
+| `license/denied` | error | License (or package policy) is `deny` |
+| `license/needs-review` | warning | License not covered by the policy or marked for review |
+| `license/no-license-found` | warning | No license information found |
+
+- **Location:** If the repository is checked out, each alert points to the manifest line declaring the dependency (e.g. `go.mod`, `package.json`, `pom.xml`; lockfiles for transitive dependencies). Without a checkout, alerts are attached to line 1 of the ecosystem's default manifest name.
+- **Deduplication:** One alert per package, license, and rule. Multiple versions of the same package are grouped. A version bump with an unchanged license keeps the existing alert (and its dismissal); a license change creates a new alert.
+- **Closing alerts:** Packages that no longer violate the policy disappear from the next upload, and their alerts are closed automatically.
+- **Requirements:** Code scanning must be available for the repository — free for public repositories; private repositories need GitHub Code Security (Advanced Security).
+- Package policy exceptions (`packagePolicies`) remain the recommended way to permanently approve a package; dismissing an alert only affects the Security tab.
 
 ## AI-Assisted Summary
 

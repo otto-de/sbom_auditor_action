@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Added
+- **License findings as code scanning alerts** (opt-in): New inputs `sarif_upload` (default `false`) and `sarif_category`. When enabled, denied and needs-review packages are written to `license-audit.sarif` (new `helpers/sarif_report.py`, `audit_licenses.py --sarif`) and uploaded via `github/codeql-action/upload-sarif`, so they show up in the Security tab and in pull requests.
+  - Three rules: `license/denied` (error), `license/needs-review` (warning), `license/no-license-found` (warning).
+  - Alerts point to the manifest line declaring the dependency when the repository is checked out.
+  - Stable fingerprints per package, license, and rule: version bumps keep existing alerts and dismissals.
+  - New output `sarif_file`; the SARIF file is also included in the `license-artifacts` artifact.
+- **26 unit tests** for SARIF generation (`helpers/test_sarif_report.py`).
+
 ## [1.5.0] - 2026-08-20
 
 ### Fixed
