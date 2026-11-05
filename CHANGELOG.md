@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Fixed
+- **Repository itself reported as dependency without license**: GitHub's SBOM contains the analyzed repository as root package (e.g. `pkg:github/cli/cli@trunk`, linked via `SPDXRef-DOCUMENT DESCRIBES …`). It was audited like a dependency and, because GitHub only sets `licenseDeclared` for it, always ended up as `NO-LICENSE-FOUND` / `needs-review`. Packages the document describes (`DESCRIBES`, `DESCRIBED_BY`, `documentDescribes`) are now excluded from the audit.
+
+### Added
+- **5 regression tests** (`TestSbomRootPackage`).
+
 ## [1.5.0] - 2026-08-20
 
 ### Fixed

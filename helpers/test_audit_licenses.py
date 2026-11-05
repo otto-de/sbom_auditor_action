@@ -12,6 +12,9 @@ import logging
 from unittest.mock import patch
 
 from audit_licenses import (
+    audit_licenses_with_resolution,
+    exclude_described_packages,
+    get_described_package_ids,
     extract_components,
     get_purl,
     find_license_policy,
@@ -63,6 +66,75 @@ class TestExtractComponents(unittest.TestCase):
         result = extract_components(sbom)
         self.assertEqual(len(result), 1)
         self.assertEqual(result[0]['name'], 'pkg')
+
+
+class TestSbomRootPackage(unittest.TestCase):
+    """The package the SBOM describes is the analyzed repository itself and must not be audited."""
+
+    ROOT = {
+        'SPDXID': 'SPDXRef-github-cli-cli-trunk-f9c94c',
+        'name': 'com.github.cli/cli',
+        'versionInfo': 'trunk',
+        'licenseDeclared': 'MIT',
+        'externalRefs': [{'referenceCategory': 'PACKAGE-MANAGER', 'referenceType': 'purl',
+                          'referenceLocator': 'pkg:github/cli/cli@trunk'}],
+    }
+    DEP = {
+        'SPDXID': 'SPDXRef-golang-cobra',
+        'name': 'github.com/spf13/cobra',
+        'versionInfo': 'v1.8.0',
+        'licenseConcluded': 'Apache-2.0',
+        'externalRefs': [{'referenceCategory': 'PACKAGE-MANAGER', 'referenceType': 'purl',
+                          'referenceLocator': 'pkg:golang/github.com/spf13/cobra@v1.8.0'}],
+    }
+
+    def _sbom(self, **extra):
+        sbom = {'SPDXID': 'SPDXRef-DOCUMENT', 'packages': [self.ROOT, self.DEP]}
+        sbom.update(extra)
+        return sbom
+
+    def test_describes_relationship(self):
+        sbom = self._sbom(relationships=[
+            {'spdxElementId': 'SPDXRef-DOCUMENT', 'relatedSpdxElement': self.ROOT['SPDXID'],
+             'relationshipType': 'DESCRIBES'},
+            {'spdxElementId': self.ROOT['SPDXID'], 'relatedSpdxElement': self.DEP['SPDXID'],
+             'relationshipType': 'DEPENDS_ON'},
+        ])
+        self.assertEqual(get_described_package_ids(sbom), {self.ROOT['SPDXID']})
+        self.assertEqual(exclude_described_packages(sbom, sbom['packages']), [self.DEP])
+
+    def test_document_describes_field(self):
+        sbom = self._sbom(documentDescribes=[self.ROOT['SPDXID']])
+        self.assertEqual(exclude_described_packages(sbom, sbom['packages']), [self.DEP])
+
+    def test_described_by_relationship(self):
+        sbom = self._sbom(relationships=[
+            {'spdxElementId': self.ROOT['SPDXID'], 'relatedSpdxElement': 'SPDXRef-DOCUMENT',
+             'relationshipType': 'DESCRIBED_BY'},
+        ])
+        self.assertEqual(exclude_described_packages(sbom, sbom['packages']), [self.DEP])
+
+    def test_without_relationships_nothing_is_removed(self):
+        sbom = self._sbom()
+        self.assertEqual(exclude_described_packages(sbom, sbom['packages']), [self.ROOT, self.DEP])
+
+    def test_root_package_not_reported_in_audit(self):
+        sbom = self._sbom(relationships=[
+            {'spdxElementId': 'SPDXRef-DOCUMENT', 'relatedSpdxElement': self.ROOT['SPDXID'],
+             'relationshipType': 'DESCRIBES'},
+        ])
+        policy = {'policies': [{'id': 'Apache-2.0', 'usagePolicy': 'allow'}]}
+        with tempfile.TemporaryDirectory() as tmp:
+            sbom_path = os.path.join(tmp, 'sbom.json')
+            policy_path = os.path.join(tmp, 'policy.json')
+            with open(sbom_path, 'w') as f:
+                json.dump(sbom, f)
+            with open(policy_path, 'w') as f:
+                json.dump(policy, f)
+            results = audit_licenses_with_resolution(sbom_path, policy_path, resolve_licenses=False)
+        self.assertEqual(results['total_components'], 1)
+        self.assertEqual(results['needs_review'], [])
+        self.assertEqual(results['audit_results'][0]['purl'], 'pkg:golang/github.com/spf13/cobra@v1.8.0')
 
 
 class TestGetPurl(unittest.TestCase):
