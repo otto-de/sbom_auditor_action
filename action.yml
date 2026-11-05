@@ -56,6 +56,14 @@ inputs:
     description: 'Maximum time in seconds to wait for GitHub to generate the SBOM (asynchronous SBOM API).'
     required: false
     default: '300'
+  sarif_upload:
+    description: 'If true, denied and needs-review licenses are uploaded as code scanning alerts (Security tab). Requires "security-events: write" permission; private repositories need GitHub Code Security / Advanced Security.'
+    required: false
+    default: 'false'
+  sarif_category:
+    description: 'Code scanning category for the uploaded SARIF results (distinguishes multiple audits in one repository).'
+    required: false
+    default: 'sbom-license-audit'
   debug:
     description: 'Enable debug logging for detailed troubleshooting output.'
     required: false
@@ -74,6 +82,9 @@ outputs:
   licenses_md:
     description: "Path to the collected license texts."
     value: "LICENSES.md"
+  sarif_file:
+    description: "Path to the SARIF report with license findings (only written when sarif_upload is true)."
+    value: "license-audit.sarif"
 
 runs:
   using: 'composite'
@@ -217,11 +228,24 @@ runs:
           fi
         fi
 
-        eval "python ${{ github.action_path }}/helpers/audit_licenses.py sbom_enriched.json $POLICY_FILE --markdown $DEBUG_ARG $PACKAGE_POLICY_ARG $OPENAI_ARG $AI_PROVIDER_ARGS $BASE_POLICY_ARG --generate-summary" > license-audit-report.md || AUDIT_EXIT_CODE=$?
+        SARIF_ARG=""
+        if [[ "${{ inputs.sarif_upload }}" == "true" ]]; then
+          SARIF_ARG="--sarif license-audit.sarif"
+        fi
+
+        eval "python ${{ github.action_path }}/helpers/audit_licenses.py sbom_enriched.json $POLICY_FILE --markdown $DEBUG_ARG $PACKAGE_POLICY_ARG $OPENAI_ARG $AI_PROVIDER_ARGS $BASE_POLICY_ARG $SARIF_ARG --generate-summary" > license-audit-report.md || AUDIT_EXIT_CODE=$?
         
         # The audit script now writes directly to GITHUB_STEP_SUMMARY
         cat license-audit-report.md >> $GITHUB_STEP_SUMMARY
         echo "AUDIT_EXIT_CODE=${AUDIT_EXIT_CODE}" >> $GITHUB_OUTPUT
+
+    - name: Upload license findings to code scanning
+      if: inputs.sarif_upload == 'true'
+      uses: github/codeql-action/upload-sarif@v4
+      with:
+        sarif_file: license-audit.sarif
+        category: ${{ inputs.sarif_category }}
+        token: ${{ inputs.github_token }}
 
     - name: Upload SBOM artifacts
       uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -238,6 +262,8 @@ runs:
         path: |
           LICENSES.md
           license-audit-report.md
+          license-audit.sarif
+        if-no-files-found: ignore
         compression-level: 6
         retention-days: 30
       
