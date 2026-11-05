@@ -155,6 +155,35 @@ def extract_components(sbom_data):
     return components
 
 
+def get_described_package_ids(sbom_data):
+    """Returns the SPDXIDs of the packages the SBOM document describes (the analyzed repository itself)."""
+    document_id = sbom_data.get('SPDXID', 'SPDXRef-DOCUMENT')
+    described = set(sbom_data.get('documentDescribes', []) or [])
+    for rel in sbom_data.get('relationships', []) or []:
+        rel_type = rel.get('relationshipType')
+        if rel_type == 'DESCRIBES' and rel.get('spdxElementId') == document_id:
+            described.add(rel.get('relatedSpdxElement'))
+        elif rel_type == 'DESCRIBED_BY' and rel.get('relatedSpdxElement') == document_id:
+            described.add(rel.get('spdxElementId'))
+    described.discard(None)
+    return described
+
+
+def exclude_described_packages(sbom_data, components):
+    """Removes the package(s) describing the analyzed repository; they are not dependencies."""
+    described = get_described_package_ids(sbom_data)
+    if not described:
+        return components
+    remaining = []
+    for component in components:
+        if component.get('SPDXID') in described:
+            logging.info(f"ℹ️ Skipping SBOM root package {component.get('name')}@{component.get('versionInfo')} "
+                         f"(the analyzed repository itself, not a dependency)")
+        else:
+            remaining.append(component)
+    return remaining
+
+
 def get_purl(component):
     """Extracts PURL from a component."""
     if component.get('externalRefs'):
@@ -579,7 +608,7 @@ def audit_licenses_with_resolution(sbom_path, policy_path, package_policy_path=N
     
     # Handle nested SBOM structure
     sbom_content = sbom_data.get("sbom", sbom_data)
-    components = extract_components(sbom_content)
+    components = exclude_described_packages(sbom_content, extract_components(sbom_content))
     
     logging.info(f"Starting audit of {len(components)} components...")
     
