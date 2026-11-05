@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Fixed
+- **Allow Google Patent License for Go** (#7): GitHub's dependency graph reports `golang.org/x/*` modules as `BSD-3-Clause AND LicenseRef-scancode-google-patent-license-golang`. The `LicenseRef` (Go's `PATENTS` file, an additional royalty-free patent grant without obligations except a defensive termination clause) had no policy entry, so all these modules ended up as `needs-review`. Added it to `policies` as `allow`; combined expressions are evaluated per constituent, so any other license in the expression is still checked.
+
+### Added
+- **5 regression tests** (`TestGolangPatentLicenseRef`).
+
 ## [1.5.0] - 2026-08-20
 
 ### Fixed
