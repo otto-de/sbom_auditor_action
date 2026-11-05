@@ -2,6 +2,25 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Fixed
+- **Go modules and scoped npm packages were never enriched** (#7): four bugs in the deps.dev lookup of `enrich_sbom.py`:
+  - Every PURL containing `github.com` was treated as internal and skipped – i.e. all Go modules hosted on GitHub (141 of 176 in `cli/cli`).
+  - PURL type `golang` was sent to deps.dev as system `golang` instead of `go` (always 404).
+  - Package names were cut after two path segments (`golang.org/x/sys` → `golang.org/x`).
+  - Scoped npm names were URL-encoded twice (`%40babel/core` → `%2540babel%2Fcore`, always 404).
+  - Duplicate license entries from deps.dev are removed (`MIT AND MIT` → `MIT`).
+  - GitHub Actions and the repository PURL (`pkg:githubactions/…`, `pkg:github/…`) and ecosystems unsupported by deps.dev are no longer queried.
+  - Effect on `cli/cli`: enriched packages 57 → 241, `needs-review` 12 → 4. False positives from GitHub's file-level scan disappear, e.g. `image-spec` (`Apache-2.0 AND LicenseRef-scancode-dco-1.1 AND MIT` → `Apache-2.0`, the MIT/DCO matches come from the README's contribution guide) and `golang.org/x/*` (Go `PATENTS` grant).
+
+### Changed
+- **deps.dev package license takes precedence over GitHub's file-level scan, with a safety net**: GitHub's original expression is kept in `enrichment.githubLicense` of the enriched SBOM. If it contains a license that is **denied** by the policy and not declared by the package, the package is marked `needs-review` and the report shows "GitHub file scan also found: …". Additional allowed or unknown matches are ignored. Without deps.dev data, GitHub's value is used as before.
+- **`internal_dependency_pattern` now also applies to enrichment**: matching packages are never sent to deps.dev (previously this was an accidental side effect of the `github.com` check).
+
+### Added
+- **18 unit tests** (`helpers/test_enrich_sbom.py`, `TestGithubFileScanSafetyNet`).
+
 ## [1.5.0] - 2026-08-20
 
 ### Fixed

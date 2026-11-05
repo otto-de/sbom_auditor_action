@@ -341,6 +341,8 @@ The action uses `fnmatch` for PURL matching, supporting `*` and `?` wildcards:
 
 To skip internal dependencies from the audit, you can use the `internal_dependency_pattern` input. This input accepts a regular expression that is matched against the PURL of each dependency. If the PURL matches the pattern, the dependency is skipped.
 
+Matching dependencies are also excluded from license enrichment, so their names are never sent to external services such as deps.dev. Configure a pattern for private modules, e.g. `pkg:golang/github\.com/my-org/.*` for internal Go modules.
+
 **Example workflow skipping internal dependencies:**
 
 ```yaml
