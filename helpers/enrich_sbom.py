@@ -12,6 +12,7 @@ import requests
 import argparse
 import logging
 import os
+import re
 import sys
 import xml.etree.ElementTree as ET
 from tqdm import tqdm
@@ -131,6 +132,65 @@ def get_maven_license_from_pom(package_name, version=None):
         return None
 
 
+# PURL type -> deps.dev system name (https://docs.deps.dev/api/v3/)
+DEPSDEV_SYSTEMS = {
+    'npm': 'npm',
+    'golang': 'go',
+    'maven': 'maven',
+    'pypi': 'pypi',
+    'nuget': 'nuget',
+    'cargo': 'cargo',
+}
+
+
+def depsdev_coordinates(purl):
+    """Map a PURL to (deps.dev system, package name, version).
+
+    Returns None for ecosystems deps.dev does not support. The package name is
+    returned unencoded (e.g. '@babel/core', 'golang.org/x/sys', 'org.slf4j:slf4j-api').
+    """
+    if not purl or not purl.startswith('pkg:'):
+        return None
+    body = purl[4:].split('?')[0].split('#')[0].lstrip('/')
+    purl_type, _, path = body.partition('/')
+    system = DEPSDEV_SYSTEMS.get(purl_type.lower())
+    if not system or not path:
+        return None
+
+    version = None
+    if '@' in path:
+        path, version = path.rsplit('@', 1)
+        version = urllib.parse.unquote(version) or None
+    segments = [urllib.parse.unquote(s) for s in path.split('/') if s]
+    if not segments:
+        return None
+
+    if system == 'maven':
+        if len(segments) < 2:
+            return None
+        package_name = f"{segments[0]}:{segments[1]}"
+    else:
+        package_name = '/'.join(segments)
+    return system, package_name, version
+
+
+def load_internal_patterns():
+    """Regex patterns for internal dependencies (same format as the audit step, newline-separated)."""
+    raw = os.environ.get('INTERNAL_PATTERNS', '')
+    return [p.strip() for p in raw.split('\n') if p.strip()]
+
+
+def is_internal_package(purl, name, patterns):
+    """Internal packages are never sent to external services."""
+    for pattern in patterns:
+        try:
+            if (purl and re.match(pattern, purl)) or (name and re.match(pattern, name)):
+                return True
+        except re.error:
+            logging.warning(f"Invalid internal dependency pattern: {pattern}")
+    return False
+
+
 def enrich_sbom_with_intelligent_resolution(input_sbom_path, output_sbom_path, cache_ttl_hours=168, resolve_licenses=True):
     """
     Enrich SBOM with license data and intelligent license resolution.
@@ -162,10 +222,12 @@ def enrich_sbom_with_intelligent_resolution(input_sbom_path, output_sbom_path, c
     license_resolved = 0
     skipped = 0
     resolution_stats = {}
+    internal_patterns = load_internal_patterns()
     
     skipped_packages = {
         "internal": [],
         "github_actions": [],
+        "unsupported_ecosystem": [],
         "not_found": [],
         "no_purl": [],
         "exception": []
@@ -191,53 +253,32 @@ def enrich_sbom_with_intelligent_resolution(input_sbom_path, output_sbom_path, c
 
         normalized_purl = purl.split('?')[0]
 
-        # Parse package URL for deps.dev query
         try:
-            parsed_purl = urllib.parse.urlparse(normalized_purl)
-            
-            # Skip internal and GitHub Actions packages
-            if 'github.com' in normalized_purl and 'github.com/actions' not in normalized_purl:
+            if is_internal_package(purl, pkg.get('name'), internal_patterns):
                 skipped += 1
                 if normalized_purl not in skipped_packages["internal"]:
                     skipped_packages["internal"].append(normalized_purl)
                 continue
-                    
-            if 'github.com/actions' in normalized_purl:
+
+            purl_type = normalized_purl[4:].split('/', 1)[0].lower() if normalized_purl.startswith('pkg:') else ''
+            if purl_type in ('githubactions', 'github'):
                 skipped += 1
                 if normalized_purl not in skipped_packages["github_actions"]:
                     skipped_packages["github_actions"].append(normalized_purl)
                 continue
 
-            # Parse PURL components
-            purl_parts = normalized_purl.split('/')
-            if len(purl_parts) < 2:
+            coordinates = depsdev_coordinates(purl)
+            if not coordinates:
+                skipped += 1
+                if normalized_purl not in skipped_packages["unsupported_ecosystem"]:
+                    skipped_packages["unsupported_ecosystem"].append(normalized_purl)
                 continue
-                
-            ecosystem = purl_parts[0].replace('pkg:', '')
-            
-            # Handle Maven packages specially (use : format for deps.dev)
-            if ecosystem == 'maven':
-                if len(purl_parts) < 3:
-                    continue
-                namespace = purl_parts[1] 
-                name_version = purl_parts[2]
-                name = name_version.split('@')[0]
-                package_name = f"{namespace}:{name}"
-                
-                # Get version if specified
-                version = None
-                if '@' in name_version:
-                    version = name_version.split('@')[1]
-            else:
-                # Other ecosystems 
-                if len(purl_parts) >= 3:
-                    package_name = f"{purl_parts[1]}/{purl_parts[2].split('@')[0]}"
-                else:
-                    package_name = purl_parts[1].split('@')[0]
-                
-                version = None
-                if '@' in purl_parts[-1]:
-                    version = purl_parts[-1].split('@')[1]
+            ecosystem, package_name, version = coordinates
+
+            # Keep the license GitHub reported (file-level scan) before deps.dev overrides it
+            github_license = pkg.get("licenseConcluded")
+            if github_license and github_license not in ('NOASSERTION', 'NONE', 'UNKNOWN'):
+                pkg.setdefault('enrichment', {})['githubLicense'] = github_license
             
             # Check cache first
             cache_key = f"depsdev:{ecosystem}:{package_name}"
@@ -384,6 +425,9 @@ def enrich_sbom_with_intelligent_resolution(input_sbom_path, output_sbom_path, c
                             resolved_licenses.append(orig_license)  # Keep original if can't resolve
                 else:
                     resolved_licenses = licenses
+
+                # deps.dev reports one entry per license file, so the same license can appear repeatedly
+                resolved_licenses = list(dict.fromkeys(resolved_licenses))
 
                 # Set the concluded license
                 if resolved_licenses:

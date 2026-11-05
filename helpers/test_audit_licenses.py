@@ -65,6 +65,52 @@ class TestExtractComponents(unittest.TestCase):
         self.assertEqual(result[0]['name'], 'pkg')
 
 
+class TestGithubFileScanSafetyNet(unittest.TestCase):
+    """Licenses only found by GitHub's file scan matter only if they are denied."""
+
+    POLICIES = [
+        {'id': 'Apache-2.0', 'usagePolicy': 'allow'},
+        {'id': 'MIT', 'usagePolicy': 'allow'},
+        {'id': 'AGPL-3.0-only', 'usagePolicy': 'deny'},
+    ]
+
+    def _component(self, concluded, github_license):
+        return {
+            'name': 'github.com/example/lib', 'versionInfo': 'v1.0.0',
+            'licenseConcluded': concluded,
+            'enrichment': {'githubLicense': github_license},
+            'externalRefs': [{'referenceType': 'purl',
+                              'referenceLocator': 'pkg:golang/github.com/example/lib@v1.0.0'}],
+        }
+
+    def test_extra_allowed_or_unknown_licenses_are_ignored(self):
+        component = self._component('Apache-2.0', 'Apache-2.0 AND LicenseRef-scancode-dco-1.1 AND MIT')
+        result = audit_component_with_resolution(component, self.POLICIES, [])[0]
+        self.assertEqual(result['policy'], 'allow')
+        self.assertNotIn('github_scan_denied', result)
+
+    def test_extra_denied_license_needs_review(self):
+        component = self._component('Apache-2.0', 'Apache-2.0 AND AGPL-3.0-only')
+        result = audit_component_with_resolution(component, self.POLICIES, [])[0]
+        self.assertEqual(result['policy'], 'needs-review')
+        self.assertEqual(result['github_scan_denied'], ['AGPL-3.0-only'])
+
+    def test_same_license_is_not_double_checked(self):
+        component = self._component('Apache-2.0', 'Apache-2.0')
+        result = audit_component_with_resolution(component, self.POLICIES, [])[0]
+        self.assertEqual(result['policy'], 'allow')
+
+    def test_denied_final_license_stays_denied(self):
+        component = self._component('AGPL-3.0-only', 'AGPL-3.0-only AND MIT')
+        result = audit_component_with_resolution(component, self.POLICIES, [])[0]
+        self.assertEqual(result['policy'], 'deny')
+
+    def test_without_github_license(self):
+        component = self._component('Apache-2.0', None)
+        result = audit_component_with_resolution(component, self.POLICIES, [])[0]
+        self.assertEqual(result['policy'], 'allow')
+
+
 class TestGetPurl(unittest.TestCase):
     """Tests for get_purl function."""
     
