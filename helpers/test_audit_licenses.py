@@ -803,5 +803,48 @@ class TestFuzzyMatchLengthRatioGuard(unittest.TestCase):
         self.assertEqual(result, 'MIT')
 
 
+class TestGolangPatentLicenseRef(unittest.TestCase):
+    """golang.org/x/* packages are reported by GitHub as
+    'BSD-3-Clause AND LicenseRef-scancode-google-patent-license-golang'."""
+
+    PATENT_REF = 'LicenseRef-scancode-google-patent-license-golang'
+
+    def setUp(self):
+        policy_path = os.path.join(os.path.dirname(__file__), 'policy.json')
+        with open(policy_path, 'r') as f:
+            policy_data = json.load(f)
+        self.policies = policy_data['policies']
+        self.aliases = policy_data.get('licenseAliases', {})
+
+    def test_patent_grant_alone_allowed(self):
+        self.assertEqual(find_license_policy(self.PATENT_REF, self.policies), 'allow')
+
+    def test_bsd_and_patent_grant_allowed(self):
+        result = find_license_policy(f'BSD-3-Clause AND {self.PATENT_REF}', self.policies, self.aliases)
+        self.assertEqual(result, 'allow')
+
+    def test_patent_grant_does_not_hide_other_licenses(self):
+        result = find_license_policy(f'AGPL-3.0-only AND {self.PATENT_REF}', self.policies, self.aliases)
+        self.assertEqual(result, 'deny')
+
+    def test_other_license_refs_still_need_review(self):
+        result = find_license_policy('BSD-3-Clause AND LicenseRef-scancode-unknown', self.policies, self.aliases)
+        self.assertEqual(result, 'needs-review')
+
+    def test_golang_x_component_allowed(self):
+        component = {
+            'name': 'golang.org/x/sys',
+            'versionInfo': 'v0.48.0',
+            'licenseConcluded': f'BSD-3-Clause AND {self.PATENT_REF}',
+            'externalRefs': [{
+                'referenceCategory': 'PACKAGE-MANAGER',
+                'referenceType': 'purl',
+                'referenceLocator': 'pkg:golang/golang.org/x/sys@v0.48.0'
+            }]
+        }
+        results = audit_component_with_resolution(component, self.policies, [], license_aliases=self.aliases)
+        self.assertEqual(results[0]['policy'], 'allow')
+
+
 if __name__ == '__main__':
     unittest.main()

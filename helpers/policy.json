@@ -3995,6 +3995,19 @@
                 "APPROVED"
             ],
             "urls": []
+        },
+        {
+            "id": "LicenseRef-scancode-google-patent-license-golang",
+            "name": "Google Patent License for Go (Additional IP Rights Grant)",
+            "family": "Patent-Grant",
+            "reference": "https://scancode-licensedb.aboutcode.org/google-patent-license-golang.html",
+            "usagePolicy": "allow",
+            "annotationRefs": [
+                "APPROVED"
+            ],
+            "urls": [
+                "https://go.dev/PATENTS"
+            ]
         }
     ],
     "licenseAliases": {
