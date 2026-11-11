@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [1.5.1] - 2026-11-04
+## [1.5.1] - 2026-11-11
 
 ### Fixed
 - **Migrate to GitHub's asynchronous SBOM API** (#42): The synchronous endpoint `GET /repos/{owner}/{repo}/dependency-graph/sbom` is shut down by GitHub on November 13, 2026. The action now requests the SBOM via `dependency-graph/sbom/generate-report` and polls the returned `fetch-report/{uuid}` URL until the report is ready (new `helpers/fetch_sbom.py`).
