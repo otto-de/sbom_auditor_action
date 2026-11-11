@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [1.6.0] - Unreleased
+## [1.6.0] - 2026-11-11
 
 ### Added
 - **License findings as code scanning alerts** (#46, opt-in): New inputs `sarif_upload` (default `false`) and `sarif_category`. When enabled, denied and needs-review packages are written to `license-audit.sarif` (new `helpers/sarif_report.py`, `audit_licenses.py --sarif`) and uploaded via `github/codeql-action/upload-sarif`, so they show up in the Security tab and in pull requests. Requires `security-events: write`; private repositories need GitHub Code Security / Advanced Security.
@@ -29,11 +29,14 @@ All notable changes to this project will be documented in this file.
 - **`internal_dependency_pattern` now also applies to enrichment** (#48): matching packages are never sent to deps.dev (previously this was an accidental side effect of the `github.com` check). Configure a pattern for private modules, e.g. `pkg:golang/github\.com/my-org/.*`.
 - **Actions upgraded to Node.js 24 and pinned to commit SHAs** (#49, supersedes #39 and #43): `actions/setup-python` v7.1.0, `actions/cache` v6.1.0, `actions/upload-artifact` v7.0.2, `github/codeql-action/upload-sarif` v4.39.3; the archived `actions/create-release` in the release workflow was replaced by `gh release create`. Removes the "Node.js 20 is deprecated" warnings. Inputs, outputs and behavior are unchanged, hence released in `v1`.
 
+### Overall effect
+- On the `cli/cli` SBOM (302 packages): `needs-review` drops from 12 to 2 — the remaining two are genuine additional licenses (`chroma`: OFL-1.1 for an embedded font, `go-digest`: CC-BY-SA-4.0 for documentation).
+
 ### Requirements
 - Self-hosted runners must be version `2.327.1` or later (GitHub-hosted runners are always up to date).
 
 ### Tests
-- New unit tests (`test_sarif_report.py`, `test_enrich_sbom.py`, `TestGithubFileScanSafetyNet`, `TestSbomRootPackage`, `TestGolangPatentLicenseRef`, `TestRetries`).
+- 67 new unit tests, 208 in total (`test_sarif_report.py`, `test_enrich_sbom.py`, `TestGithubFileScanSafetyNet`, `TestSbomRootPackage`, `TestGolangPatentLicenseRef`, `TestRetries`).
 
 ## [1.5.1] - 2026-11-11
 
