@@ -26,8 +26,30 @@ MAX_POLL_INTERVAL_SECONDS = 15
 REQUEST_TIMEOUT_SECONDS = 60
 
 
+MAX_ATTEMPTS = 3
+RETRY_STATUS_CODES = (500, 502, 503, 504)
+
+
 class SbomFetchError(Exception):
     """Raised when the SBOM cannot be retrieved."""
+
+
+def _get_with_retry(session, url, sleep=time.sleep, **kwargs):
+    """GET with retries on connection errors, timeouts and transient 5xx responses."""
+    for attempt in range(1, MAX_ATTEMPTS + 1):
+        try:
+            response = session.get(url, **kwargs)
+        except (requests.ConnectionError, requests.Timeout, requests.exceptions.ChunkedEncodingError) as exc:
+            if attempt == MAX_ATTEMPTS:
+                raise
+            logging.warning("Request to %s failed (%s), retrying (%d/%d)...",
+                            url.split("?")[0], exc, attempt, MAX_ATTEMPTS - 1)
+        else:
+            if response.status_code not in RETRY_STATUS_CODES or attempt == MAX_ATTEMPTS:
+                return response
+            logging.warning("Request to %s returned %d, retrying (%d/%d)...",
+                            url.split("?")[0], response.status_code, attempt, MAX_ATTEMPTS - 1)
+        sleep(2 ** attempt)
 
 
 def _api_headers(token):
@@ -52,10 +74,11 @@ def _access_error(status_code, repository, response):
     )
 
 
-def request_report(session, api_url, repository, token):
+def request_report(session, api_url, repository, token, sleep=time.sleep):
     """Trigger SBOM generation and return the polling URL."""
     url = f"{api_url}/repos/{repository}/dependency-graph/sbom/generate-report"
-    response = session.get(url, headers=_api_headers(token), timeout=REQUEST_TIMEOUT_SECONDS)
+    response = _get_with_retry(session, url, sleep=sleep, headers=_api_headers(token),
+                               timeout=REQUEST_TIMEOUT_SECONDS)
     if response.status_code in (403, 404):
         raise _access_error(response.status_code, repository, response)
     if response.status_code not in (200, 201):
@@ -84,8 +107,8 @@ def wait_for_download_url(session, sbom_url, repository, token, timeout_seconds,
     deadline = clock() + timeout_seconds
     attempt = 1
     while True:
-        response = session.get(sbom_url, headers=_api_headers(token),
-                               allow_redirects=False, timeout=REQUEST_TIMEOUT_SECONDS)
+        response = _get_with_retry(session, sbom_url, sleep=sleep, headers=_api_headers(token),
+                                   allow_redirects=False, timeout=REQUEST_TIMEOUT_SECONDS)
         if response.status_code in (301, 302, 303, 307, 308):
             location = response.headers.get("Location")
             if not location:
@@ -108,9 +131,9 @@ def wait_for_download_url(session, sbom_url, repository, token, timeout_seconds,
         attempt += 1
 
 
-def download_sbom(session, download_url):
+def download_sbom(session, download_url, sleep=time.sleep):
     """Download the SBOM from the temporary URL (without GitHub credentials)."""
-    response = session.get(download_url, timeout=REQUEST_TIMEOUT_SECONDS)
+    response = _get_with_retry(session, download_url, sleep=sleep, timeout=REQUEST_TIMEOUT_SECONDS)
     if response.status_code != 200:
         raise SbomFetchError(f"Failed to download SBOM (status {response.status_code}).")
     try:
@@ -129,11 +152,11 @@ def fetch_sbom(repository, token, api_url=DEFAULT_API_URL, timeout_seconds=DEFAU
                session=None, sleep=time.sleep, clock=time.monotonic):
     session = session or requests.Session()
     api_url = api_url.rstrip("/")
-    sbom_url = request_report(session, api_url, repository, token)
+    sbom_url = request_report(session, api_url, repository, token, sleep=sleep)
     logging.info("SBOM generation requested: %s", sbom_url)
     download_url = wait_for_download_url(session, sbom_url, repository, token, timeout_seconds,
                                          sleep=sleep, clock=clock)
-    return download_sbom(session, download_url)
+    return download_sbom(session, download_url, sleep=sleep)
 
 
 def main(argv=None):
