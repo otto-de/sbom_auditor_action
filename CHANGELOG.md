@@ -2,6 +2,42 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.6.0] - 2026-11-11
+
+### Added
+- **License findings as code scanning alerts** (#46, opt-in): New inputs `sarif_upload` (default `false`) and `sarif_category`. When enabled, denied and needs-review packages are written to `license-audit.sarif` (new `helpers/sarif_report.py`, `audit_licenses.py --sarif`) and uploaded via `github/codeql-action/upload-sarif`, so they show up in the Security tab and in pull requests. Requires `security-events: write`; private repositories need GitHub Code Security / Advanced Security.
+  - Three rules: `license/denied` (error), `license/needs-review` (warning), `license/no-license-found` (warning).
+  - Alerts point to the manifest line declaring the dependency when the repository is checked out.
+  - Stable fingerprints per package, license, and rule: version bumps keep existing alerts and dismissals.
+  - New output `sarif_file`; the SARIF file is also included in the `license-artifacts` artifact.
+
+### Fixed
+- **Go modules and scoped npm packages were never enriched** (#7, #48): four bugs in the deps.dev lookup of `enrich_sbom.py`:
+  - Every PURL containing `github.com` was treated as internal and skipped – i.e. all Go modules hosted on GitHub (141 of 176 in `cli/cli`).
+  - PURL type `golang` was sent to deps.dev as system `golang` instead of `go` (always 404).
+  - Package names were cut after two path segments (`golang.org/x/sys` → `golang.org/x`).
+  - Scoped npm names were URL-encoded twice (`%40babel/core` → `%2540babel%2Fcore`, always 404).
+  - Duplicate license entries from deps.dev are removed (`MIT AND MIT` → `MIT`).
+  - GitHub Actions and the repository PURL (`pkg:githubactions/…`, `pkg:github/…`) and ecosystems unsupported by deps.dev are no longer queried.
+  - Effect on `cli/cli`: enriched packages 57 → 241, `needs-review` 12 → 4. False positives from GitHub's file-level scan disappear, e.g. `image-spec` (`Apache-2.0 AND LicenseRef-scancode-dco-1.1 AND MIT` → `Apache-2.0`; the MIT/DCO matches come from the README's contribution guide) and `golang.org/x/*` (Go `PATENTS` grant).
+- **Repository itself reported as dependency without license** (#47): GitHub's SBOM contains the analyzed repository as root package (e.g. `pkg:github/cli/cli@trunk`, linked via `SPDXRef-DOCUMENT DESCRIBES …`). It was audited like a dependency and, because GitHub only sets `licenseDeclared` for it, always ended up as `NO-LICENSE-FOUND` / `needs-review`. Packages the document describes (`DESCRIBES`, `DESCRIBED_BY`, `documentDescribes`) are now excluded from the audit.
+- **Allow Google Patent License for Go** (#7, #45): `LicenseRef-scancode-google-patent-license-golang` (Go's `PATENTS` file, an additional royalty-free patent grant without obligations except a defensive termination clause) is now `allow`. Acts as fallback for `golang.org/x/*` modules when deps.dev has no data; other licenses in the expression are still checked.
+- **Retry SBOM requests on transient errors** (#50): connection errors, timeouts, broken downloads and `5xx` responses are retried up to 3 times with backoff (2s, 4s); `403`/`404` are not retried.
+
+### Changed
+- **deps.dev package license takes precedence over GitHub's file-level scan, with a safety net** (#48): GitHub's original expression is kept in `enrichment.githubLicense` of the enriched SBOM. If it contains a license that is **denied** by the policy and not declared by the package, the package is marked `needs-review` and the report shows "GitHub file scan also found: …". Additional allowed or unknown matches are ignored. Without deps.dev data, GitHub's value is used as before.
+- **`internal_dependency_pattern` now also applies to enrichment** (#48): matching packages are never sent to deps.dev (previously this was an accidental side effect of the `github.com` check). Configure a pattern for private modules, e.g. `pkg:golang/github\.com/my-org/.*`.
+- **Actions upgraded to Node.js 24 and pinned to commit SHAs** (#49, supersedes #39 and #43): `actions/setup-python` v7.1.0, `actions/cache` v6.1.0, `actions/upload-artifact` v7.0.2, `github/codeql-action/upload-sarif` v4.39.3; the archived `actions/create-release` in the release workflow was replaced by `gh release create`. Removes the "Node.js 20 is deprecated" warnings. Inputs, outputs and behavior are unchanged, hence released in `v1`.
+
+### Overall effect
+- On the `cli/cli` SBOM (302 packages): `needs-review` drops from 12 to 2 — the remaining two are genuine additional licenses (`chroma`: OFL-1.1 for an embedded font, `go-digest`: CC-BY-SA-4.0 for documentation).
+
+### Requirements
+- Self-hosted runners must be version `2.327.1` or later (GitHub-hosted runners are always up to date).
+
+### Tests
+- 67 new unit tests, 208 in total (`test_sarif_report.py`, `test_enrich_sbom.py`, `TestGithubFileScanSafetyNet`, `TestSbomRootPackage`, `TestGolangPatentLicenseRef`, `TestRetries`).
+
 ## [1.5.1] - 2026-11-11
 
 ### Fixed
