@@ -11,6 +11,8 @@ import tempfile
 import unittest
 from unittest.mock import MagicMock, patch
 
+import requests
+
 from fetch_sbom import (
     API_VERSION,
     SbomFetchError,
@@ -54,7 +56,10 @@ class FakeSession:
 
     def get(self, url, headers=None, **kwargs):
         self.calls.append({"url": url, "headers": headers or {}, **kwargs})
-        return self.responses[url].pop(0)
+        item = self.responses[url].pop(0)
+        if isinstance(item, Exception):
+            raise item
+        return item
 
 
 class FakeClock:
@@ -200,6 +205,66 @@ class TestFetchSbom(unittest.TestCase):
         clock = FakeClock()
         fetch_sbom(REPO, "t", api_url=API + "/", session=session, sleep=clock.sleep, clock=clock.time)
         self.assertEqual(session.calls[0]["url"], GENERATE_URL)
+
+
+class TestRetries(unittest.TestCase):
+
+    def test_retries_connection_error_on_download(self):
+        session = FakeSession({
+            GENERATE_URL: [_response(201, {"sbom_url": SBOM_URL})],
+            SBOM_URL: [_response(302, headers={"Location": DOWNLOAD_URL})],
+            DOWNLOAD_URL: [requests.ConnectionError("Connection broken: BrokenPipeError"), _response(200, SPDX)],
+        })
+        result, clock = _run(session)
+        self.assertEqual(result, SPDX)
+        self.assertEqual(clock.sleeps, [2])
+
+    def test_retries_chunked_encoding_error(self):
+        session = FakeSession({
+            GENERATE_URL: [_response(201, {"sbom_url": SBOM_URL})],
+            SBOM_URL: [_response(302, headers={"Location": DOWNLOAD_URL})],
+            DOWNLOAD_URL: [requests.exceptions.ChunkedEncodingError("broken"), _response(200, SPDX)],
+        })
+        result, _ = _run(session)
+        self.assertEqual(result, SPDX)
+
+    def test_retries_server_error_on_generate(self):
+        session = FakeSession({
+            GENERATE_URL: [_response(502), _response(503), _response(201, {"sbom_url": SBOM_URL})],
+            SBOM_URL: [_response(302, headers={"Location": DOWNLOAD_URL})],
+            DOWNLOAD_URL: [_response(200, SPDX)],
+        })
+        result, clock = _run(session)
+        self.assertEqual(result, SPDX)
+        self.assertEqual(clock.sleeps, [2, 4])
+
+    def test_retries_timeout_while_polling(self):
+        session = FakeSession({
+            GENERATE_URL: [_response(201, {"sbom_url": SBOM_URL})],
+            SBOM_URL: [requests.Timeout("read timed out"), _response(302, headers={"Location": DOWNLOAD_URL})],
+            DOWNLOAD_URL: [_response(200, SPDX)],
+        })
+        result, _ = _run(session)
+        self.assertEqual(result, SPDX)
+
+    def test_gives_up_after_max_attempts(self):
+        session = FakeSession({
+            GENERATE_URL: [requests.ConnectionError("down")] * 3,
+        })
+        with self.assertRaises(requests.ConnectionError):
+            _run(session)
+        self.assertEqual(len(session.calls), 3)
+
+    def test_persistent_server_error_is_reported(self):
+        session = FakeSession({GENERATE_URL: [_response(500)] * 3})
+        with self.assertRaisesRegex(SbomFetchError, "500"):
+            _run(session)
+
+    def test_client_errors_are_not_retried(self):
+        session = FakeSession({GENERATE_URL: [_response(404, {"message": "Not Found"})]})
+        with self.assertRaises(SbomFetchError):
+            _run(session)
+        self.assertEqual(len(session.calls), 1)
 
 
 class TestMain(unittest.TestCase):
