@@ -248,6 +248,22 @@ def find_license_policy(license_id, license_policies, license_aliases=None, comb
     return policy
 
 
+def find_denied_extra_licenses(github_license, final_license, license_policies,
+                               license_aliases=None, combined_aliases=None, pattern_aliases=None):
+    """Returns licenses in GitHub's expression that are missing from the final license and denied by policy."""
+    parser = SPDXExpressionParser(license_aliases=license_aliases, combined_aliases=combined_aliases,
+                                  pattern_aliases=pattern_aliases)
+    final_ids = {c.lower() for c in parser.get_expression_components(final_license or '')}
+    denied = []
+    for license_id in parser.get_expression_components(github_license):
+        if license_id.lower() in final_ids or license_id in denied:
+            continue
+        if find_license_policy(license_id, license_policies, license_aliases,
+                               combined_aliases, pattern_aliases) == 'deny':
+            denied.append(license_id)
+    return denied
+
+
 def generate_summary_table(total_packages, internal_packages, gh_actions_count, denied_count, needs_review_count, resolved_count=0, resolution_stats=None):
     """Generates a summary table and appends it to the GITHUB_STEP_SUMMARY file."""
     summary_file = os.environ.get('GITHUB_STEP_SUMMARY')
@@ -487,6 +503,18 @@ def audit_component_with_resolution(component, license_policies, package_policie
         policy = "needs-review"
         logging.warning(f"  No policy found for license '{final_license}'. Marking for review.")
 
+    # 4b. Safety net: the enrichment replaced GitHub's file-level license scan with the package
+    # license from deps.dev. Licenses only found by GitHub are ignored unless they are denied.
+    github_scan_denied = []
+    github_license = (component.get('enrichment') or {}).get('githubLicense')
+    if policy == 'allow' and github_license and github_license != final_license:
+        github_scan_denied = find_denied_extra_licenses(
+            github_license, final_license, license_policies, license_aliases, combined_aliases, pattern_aliases)
+        if github_scan_denied:
+            policy = "needs-review"
+            logging.warning(f"  GitHub's file scan for {component_name}@{component_version} also found denied "
+                            f"license(s) {github_scan_denied} not declared by the package. Marking for review.")
+
     # 5. Build audit result
     result = {
         "package": f"{component_name}@{component_version}",
@@ -494,6 +522,9 @@ def audit_component_with_resolution(component, license_policies, package_policie
         "license": final_license,
         "policy": policy
     }
+    if github_scan_denied:
+        result['github_scan_license'] = github_license
+        result['github_scan_denied'] = github_scan_denied
     
     # Add resolution info if license was resolved
     if resolution_info:
@@ -792,7 +823,10 @@ def generate_markdown_report(denied, needs_review, internal, allowed, ai_summary
             license_display = item.get('license_original', item.get('license', 'N/A'))
             if 'resolution' in item:
                 license_display += f" → **{item['license']}**"
-            report += f"| `{item['package']}` | `{license_display}` | {item['policy']} | `{item['purl']}` |\n"
+            license_cell = f"`{license_display}`"
+            if item.get('github_scan_denied'):
+                license_cell += f" ⚠️ GitHub file scan also found: `{', '.join(item['github_scan_denied'])}`"
+            report += f"| `{item['package']}` | {license_cell} | {item['policy']} | `{item['purl']}` |\n"
         report += "\n"
 
     if internal:

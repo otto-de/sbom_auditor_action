@@ -128,6 +128,7 @@ runs:
         fi
       env:
         OPENAI_API_KEY: ${{ inputs.openai_api_key }}
+        INTERNAL_PATTERNS: ${{ inputs.internal_dependency_pattern }}
 
     - name: Collect License Texts
       shell: bash
