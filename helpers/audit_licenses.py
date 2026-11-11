@@ -18,6 +18,7 @@ from ai_summary import generate_summary
 from license_resolver import LicenseResolver
 from spdx_expression_parser import SPDXExpressionParser
 from enrich_sbom import get_maven_license_from_pom
+from sarif_report import write_sarif
 
 # Logging will be configured in main() based on debug flag
 
@@ -874,6 +875,10 @@ if __name__ == "__main__":
     parser.add_argument("--base-policy",
                         help="Base/default policy file to merge with. Custom policy overrides base policy entries with same id.")
     parser.add_argument("--output", help="Output JSON file (optional)")
+    parser.add_argument("--sarif", help="Write denied / needs-review findings as SARIF 2.1.0 file (optional)")
+    parser.add_argument("--sarif-workspace", default=os.environ.get('GITHUB_WORKSPACE', '.'),
+                        help="Checkout directory used to locate manifest files for SARIF locations "
+                             "(default: $GITHUB_WORKSPACE or current directory)")
     parser.add_argument("--debug", action="store_true", help="Enable debug logging")
 
     args = parser.parse_args()
@@ -924,6 +929,9 @@ if __name__ == "__main__":
     # Exit with appropriate status code based on audit results
     denied = results.get('denied', [])
     needs_review = results.get('needs_review', [])
+
+    if args.sarif:
+        write_sarif(denied + needs_review, args.sarif, workspace=args.sarif_workspace)
     
     if denied or needs_review:
         logging.info("Found packages that are denied or need review. Exiting with status 1.")
