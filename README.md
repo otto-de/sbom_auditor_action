@@ -1,7 +1,7 @@
 # SBOM Auditor Action
 
 This GitHub Action audits Software Bill of Materials (SBOM) for license compliance. It performs the following steps:
-1.  Fetches the SBOM from the repository's dependency graph.
+1.  Fetches the SBOM from the repository's dependency graph (via GitHub's asynchronous SBOM API).
 2.  Enriches the SBOM with detailed license information.
 3.  Collects the full license texts for all dependencies.
 4.  Audits the licenses against a defined policy.
@@ -67,7 +67,10 @@ To use this action in your workflow, add the following step:
 | `internal_dependency_pattern` | A newline-separated list of regex patterns to identify internal dependencies that should be skipped from the audit. | `false`  | `''` (no internal patterns by default)                  |
 | `enable_cache`        | Enable caching for SBOM enrichment to speed up subsequent runs (recommended for organizations).                  | `false`  | `'true'`                                                 |
 | `cache_ttl_hours`     | Cache time-to-live in hours for package data (default: 168 = 7 days).                                          | `false`  | `'168'`                                                  |
+| `sbom_timeout_seconds` | Maximum time in seconds to wait for GitHub to generate the SBOM.                                               | `false`  | `'300'`                                                  |
 | `debug`               | Enable debug logging for detailed troubleshooting output.                                                       | `false`  | `'false'`                                                |
+
+**SBOM retrieval:** The SBOM is requested via GitHub's asynchronous SBOM API (`dependency-graph/sbom/generate-report`, then polling `fetch-report/{uuid}`). The previous synchronous endpoint is shut down by GitHub on November 13, 2026. The Dependency Graph must be enabled and the token needs read access to the repository contents (`contents: read`). If GitHub does not finish generating the SBOM within `sbom_timeout_seconds`, the action fails.
 
 **Note:** Parameters marked with `*` are conditionally required based on the selected `ai_provider`:
 - `azure_endpoint` and `azure_deployment` are required when `ai_provider` is `'azure'`
