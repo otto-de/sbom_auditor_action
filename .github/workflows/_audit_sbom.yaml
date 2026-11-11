@@ -33,19 +33,19 @@ jobs:
     steps:
       - name: Generate token
         id: generate_token
-        uses: getsentry/action-github-app-token@v3
+        uses: getsentry/action-github-app-token@d4b5da6c5e37703f8c3b3e43abb5705b46e159cc # v3.0.0
         with:
           app_id: ${{ secrets.TOKEN_APP_ID }}
           private_key: ${{ secrets.TOKEN_APP_PRIVATE_KEY }}
           
       - name: Checkout Caller Repository
-        uses: actions/checkout@v4.1.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ env.CHECKOUT_REF }}
           fetch-depth: 1
 
       - name: Checkout gha-store Repository (for tools)
-        uses: actions/checkout@v4.1.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: otto-ec/si_gha-store # This repository
           ref: main # Or a specific tag/branch of your tools
@@ -53,7 +53,7 @@ jobs:
           path: gha-store # Checkout into a 'gha-store' subdirectory
           fetch-depth: 1
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: '3.x'
 
@@ -123,7 +123,7 @@ jobs:
           echo "AUDIT_EXIT_CODE=${AUDIT_EXIT_CODE}" >> $GITHUB_OUTPUT
 
       - name: Upload license artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: license-artifacts
           path: |

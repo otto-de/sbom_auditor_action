@@ -49,6 +49,8 @@ To use this action in your workflow, add the following step:
     #   de.my-other-company.*
 ```
 
+**Runner requirements:** All actions used internally run on Node.js 24 and are pinned to full-length commit SHAs. Self-hosted runners must be version `2.327.1` or later (GitHub-hosted runners are always up to date).
+
 ## Inputs
 
 | Name                  | Description                                                                                                  | Required | Default                                                  |
@@ -197,7 +199,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Run SBOM Auditor
         id: sbom-audit
@@ -210,7 +212,7 @@ jobs:
           debug: false
 
       - name: Upload Audit Artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: sbom-audit-artifacts
           path: |
@@ -400,7 +402,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Run SBOM Auditor
         id: sbom-audit
@@ -445,7 +447,7 @@ The action uses a **hybrid caching strategy** for maximum performance:
 #### Repository-Level Cache (GitHub Actions)
 ```yaml
 # Automatic per-repository caching
-- uses: actions/cache@v4
+- uses: actions/cache@v6
   with:
     path: ./sbom_cache
     key: sbom-cache-${{ github.repository_owner }}-${{ hashFiles('**/*.json') }}
