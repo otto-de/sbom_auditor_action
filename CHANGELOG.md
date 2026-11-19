@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.6.1] - 2026-11-19
+
+### Fixed
+- **More Eclipse Distribution License variants recognized** (#52): Capitalized spellings such as `Eclipse Distribution License`, `Eclipse Distribution License 1.0`, `Eclipse Distribution License v1.0` and `Eclipse Distribution License - v 1.0` are now mapped to `BSD-3-Clause` in `helpers/policy.json`. Previously these packages could end up as `needs-review`.
+
 ## [1.6.0] - 2026-11-11
 
 ### Added
