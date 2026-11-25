@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.6.1] - 2026-11-25
+
+### Fixed
+- **`xpp` license allowed** (#52): The `xpp` license (family `BSD`) was `deny` / `PROHIBITED` in the policy and is now `allow` / `APPROVED`.
+
 ## [1.6.0] - 2026-11-11
 
 ### Added
