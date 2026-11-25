@@ -2330,11 +2330,11 @@
         {
             "id": "xpp",
             "name": "xpp",
-            "family": "dummy177",
+            "family": "BSD",
             "reference": "https://spdx.org/licenses/xpp.html",
-            "usagePolicy": "deny",
+            "usagePolicy": "allow",
             "annotationRefs": [
-                "PROHIBITED"
+                "APPROVED"
             ],
             "urls": [
                 ""
